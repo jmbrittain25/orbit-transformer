@@ -5,6 +5,7 @@
 /.venv/
 /logs/
 /output/
+/orbit_training_runs/
 /.DS_Store/
 .DS_Store
 *.csv
