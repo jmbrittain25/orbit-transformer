@@ -91,6 +91,7 @@ def load_and_resume_training(run_dir=None, additional_epochs=10):
     # Configure loss
     loss_config = ot.LossConfig(
         cross_entropy_weight=1.0,
+        position_weight=0.5,
         r_weight=1.0,
         theta_weight=1.0,
         phi_weight=1.0
@@ -103,7 +104,7 @@ def load_and_resume_training(run_dir=None, additional_epochs=10):
         loss_fn=loss_fn,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
-        lr=2e-5,  # You might want to adjust this for continued training
+        lr=1e-4,  # You might want to adjust this for continued training
         batch_size=32,
         num_workers=0,
         device=device,
@@ -132,4 +133,7 @@ def load_and_resume_training(run_dir=None, additional_epochs=10):
     return history
 
 if __name__ == "__main__":
-    history = load_and_resume_training(additional_epochs=10)
+
+    run_dir = os.path.join("orbit_training_runs", "run_20250217_131852")
+
+    history = load_and_resume_training(run_dir=run_dir, additional_epochs=10)

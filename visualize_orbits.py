@@ -182,18 +182,22 @@ def plot_orbit_comparison(initial_positions, true_positions, predicted_positions
     z = R_EARTH * np.outer(np.ones(np.size(u)), np.cos(v))
     ax1.plot_surface(x, y, z, color='lightblue', alpha=0.3)
     
-    # Plot initial sequence
+    # Plot initial sequence with points
     init_x, init_y, init_z = zip(*initial_positions)
-    ax1.plot(init_x, init_y, init_z, 'k-', label='Initial Sequence', linewidth=3)
+    ax1.plot(init_x, init_y, init_z, 'k-', label='Initial Sequence', linewidth=2, alpha=0.5)
+    ax1.scatter(init_x, init_y, init_z, c='black', s=30, alpha=0.8)
     
-    # Plot trajectories
+    # Plot trajectories with points
     true_x, true_y, true_z = zip(*true_positions)
     pred_x, pred_y, pred_z = zip(*predicted_positions)
     
-    ax1.plot(true_x, true_y, true_z, 'b-', label='True Orbit', linewidth=2, alpha=0.8)
-    ax1.plot(pred_x, pred_y, pred_z, 'r--', label='Predicted Orbit', linewidth=2, alpha=0.8)
+    ax1.plot(true_x, true_y, true_z, 'b-', label='True Orbit', linewidth=1, alpha=0.5)
+    ax1.scatter(true_x, true_y, true_z, c='blue', s=30, alpha=0.8)
     
-    # Start and end points
+    ax1.plot(pred_x, pred_y, pred_z, 'r--', label='Predicted Orbit', linewidth=1, alpha=0.5)
+    ax1.scatter(pred_x, pred_y, pred_z, c='red', s=30, alpha=0.8)
+    
+    # Start and end points (keeping these larger for emphasis)
     ax1.scatter(init_x[0], init_y[0], init_z[0], c='black', marker='o', s=100, label='Sequence Start')
     ax1.scatter(init_x[-1], init_y[-1], init_z[-1], c='black', marker='s', s=100, label='Sequence End')
     
@@ -261,9 +265,9 @@ def plot_orbit_comparison(initial_positions, true_positions, predicted_positions
     plt.tight_layout()
     return fig, metrics
 
-def visualize_predictions(test_dataset, num_orbits=3, prediction_steps=60):
+def visualize_predictions(test_dataset, run_dir=None, num_orbits=3, prediction_steps=60):
     """Visualize predictions for multiple test orbits."""
-    model, device = load_latest_model()
+    model, device = load_latest_model(run_dir=run_dir)
     tokenizer = get_tokenizer()
     
     # Store metrics for all orbits
@@ -349,4 +353,9 @@ if __name__ == "__main__":
         stride=1
     )
     
-    visualize_predictions(test_dataset, num_orbits=3)
+    # run_dir = os.path.join("orbit_training_runs", "run_20250216_214057", "run_20250217_082010")
+
+    run_dir = os.path.join("orbit_training_runs", "run_20250217_131852", "run_20250217_191849")
+
+
+    visualize_predictions(test_dataset, run_dir=run_dir, num_orbits=10)

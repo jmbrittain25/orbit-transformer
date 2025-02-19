@@ -50,6 +50,7 @@ if __name__ == "__main__":
     # Configure loss
     loss_config = ot.LossConfig(
         cross_entropy_weight=1.0,
+        position_weight=5.0,
         r_weight=1.0,
         theta_weight=1.0,
         phi_weight=1.0

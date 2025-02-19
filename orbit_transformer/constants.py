@@ -19,16 +19,3 @@ MAX_THRUST = KILOMETER
 
 MIN_TIME_STEP_SEC = MINUTE
 MAX_TIME_STEP_SEC = HOUR
-
-# RANDOM_EARTH_X = list()
-# RANDOM_EARTH_Y = list()
-# RANDOM_EARTH_Z = list()
-# for _ in range(1_000):
-#     azimuthal_angle = np.random.uniform(0, 2 * np.pi)
-#     polar_angle = np.random.uniform(0, np.pi)
-#     x = R_EARTH * np.sin(polar_angle) * np.cos(azimuthal_angle)
-#     y = R_EARTH * np.sin(polar_angle) * np.sin(azimuthal_angle)
-#     z = R_EARTH * np.cos(polar_angle)
-#     RANDOM_EARTH_X.append(x)
-#     RANDOM_EARTH_Y.append(y)
-#     RANDOM_EARTH_Z.append(z)

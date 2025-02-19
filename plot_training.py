@@ -27,8 +27,18 @@ def load_metrics(run_dir):
 
 def plot_training_curves(metrics, save_dir=None):
     """Plot various training curves from the metrics."""
-    # Create figure with subplots
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+    plt.close()
+
+    # Create figure with subplots - now 2x3 to include position metrics
+    fig = plt.figure(figsize=(18, 12))
+    gs = fig.add_gridspec(2, 3)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[0, 2])
+    ax4 = fig.add_subplot(gs[1, 0])
+    ax5 = fig.add_subplot(gs[1, 1])
+    ax6 = fig.add_subplot(gs[1, 2])
+    
     fig.suptitle('Training Metrics', fontsize=16)
     
     # Get epochs from metrics
@@ -48,63 +58,80 @@ def plot_training_curves(metrics, save_dir=None):
     r_losses = []
     theta_losses = []
     phi_losses = []
+    position_raw = []
+    position_norm = []
     
     for epoch_metric in metrics['epoch_metrics']:
         train_metrics = epoch_metric['train']
         r_losses.append(train_metrics['loss/r'])
         theta_losses.append(train_metrics['loss/theta'])
         phi_losses.append(train_metrics['loss/phi'])
+        position_raw.append(train_metrics['loss/position/km'])
+        position_norm.append(train_metrics['loss/position/normalized'])
     
-    # Plot component losses
+    # Plot token component losses
     ax2.plot(epochs, r_losses, label='r')
     ax2.plot(epochs, theta_losses, label='theta')
     ax2.plot(epochs, phi_losses, label='phi')
-    ax2.set_title('Component Losses')
+    ax2.set_title('Token Component Losses')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Loss')
     ax2.legend()
     ax2.grid(True)
     
+    # Plot raw position error
+    ax3.plot(epochs, position_raw, label='Position Error')
+    ax3.set_title('Raw Position Error')
+    ax3.set_xlabel('Epoch')
+    ax3.set_ylabel('Distance (km)')
+    ax3.grid(True)
+    
+    # Plot normalized position error
+    ax4.plot(epochs, position_norm, label='Normalized Error')
+    ax4.set_title('Normalized Position Error')
+    ax4.set_xlabel('Epoch')
+    ax4.set_ylabel('Error (fraction of radius)')
+    ax4.grid(True)
+    
     # Plot loss ratios
     total_losses = np.array(metrics['train_losses'])
-    ax3.plot(epochs, r_losses / total_losses, label='r/total')
-    ax3.plot(epochs, theta_losses / total_losses, label='theta/total')
-    ax3.plot(epochs, phi_losses / total_losses, label='phi/total')
-    ax3.set_title('Loss Ratios')
-    ax3.set_xlabel('Epoch')
-    ax3.set_ylabel('Ratio')
-    ax3.legend()
-    ax3.grid(True)
+    ce_total = np.array([m['train'].get('loss/ce_total', 0.0) for m in metrics['epoch_metrics']])
+    pos_contribution = np.array(position_norm)  # Assuming position_weight is applied in loss function
+    
+    ax5.plot(epochs, ce_total / total_losses, label='CE Loss Contribution')
+    ax5.plot(epochs, pos_contribution / total_losses, label='Position Loss Contribution')
+    ax5.set_title('Loss Component Contributions')
+    ax5.set_xlabel('Epoch')
+    ax5.set_ylabel('Fraction of Total Loss')
+    ax5.legend()
+    ax5.grid(True)
     
     # Plot validation metrics if available
     if metrics['val_losses']:
-        val_r_losses = []
-        val_theta_losses = []
-        val_phi_losses = []
+        val_position_raw = []
+        val_position_norm = []
         
         for epoch_metric in metrics['epoch_metrics']:
             if epoch_metric['val']:
                 val_metrics = epoch_metric['val']
-                val_r_losses.append(val_metrics['loss/r'])
-                val_theta_losses.append(val_metrics['loss/theta'])
-                val_phi_losses.append(val_metrics['loss/phi'])
+                val_position_raw.append(val_metrics['loss/position/km'])
+                val_position_norm.append(val_metrics['loss/position/normalized'])
         
-        ax4.plot(epochs, val_r_losses, label='r')
-        ax4.plot(epochs, val_theta_losses, label='theta')
-        ax4.plot(epochs, val_phi_losses, label='phi')
-        ax4.set_title('Validation Component Losses')
-        ax4.set_xlabel('Epoch')
-        ax4.set_ylabel('Loss')
-        ax4.legend()
-        ax4.grid(True)
+        ax6.plot(epochs, position_raw, label='Train')
+        ax6.plot(epochs, val_position_raw, label='Validation')
+        ax6.set_title('Position Error Comparison')
+        ax6.set_xlabel('Epoch')
+        ax6.set_ylabel('Distance (km)')
+        ax6.legend()
+        ax6.grid(True)
     
     plt.tight_layout()
-
+    
     if save_dir:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         plt.savefig(os.path.join(save_dir, f'training_curves_{timestamp}.png'))
-    else:
-        plt.show()
+    
+    plt.show()
     
 def plot_learning_curves(run_dir=None):
     """Main function to load and plot training metrics."""
@@ -118,5 +145,8 @@ def plot_learning_curves(run_dir=None):
     print(f"Plots saved to: {run_dir}")
 
 if __name__ == "__main__":
-    run_dir = os.path.join("orbit_training_runs", "run_20250216_214057", "run_20250217_082010")
+    # run_dir = os.path.join("orbit_training_runs", "run_20250216_214057", "run_20250217_082010")
+
+    run_dir = os.path.join("orbit_training_runs", "run_20250217_131852", "run_20250217_191849")
+
     plot_learning_curves(run_dir=run_dir)
