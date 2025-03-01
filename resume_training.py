@@ -100,8 +100,8 @@ def load_and_resume_training(run_dir=None, additional_epochs=10):
 
     # Create trainer with loaded state
     trainer = ot.OrbitTrainer(
-        model=model,
-        loss_fn=loss_fn,
+        transfer_model=model,
+        loss_model=loss_fn,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         lr=1e-4,  # You might want to adjust this for continued training

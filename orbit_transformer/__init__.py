@@ -1,12 +1,12 @@
 from .dataset import OrbitTokenDataset
-from .loss import OrbitLossWrapper, LossConfig
-from .model import ThreeTokenGPTConfig, ThreeTokenGPTDecoder
+from .loss_model import LossModel, PositionCrossEntropyLossModel
+from .transfer_model import TransferModel, ThreeTokenDecoderTransferModel
 from .orbit_simulator import (
     generate_orbits_dataset,
     split_orbits_by_id
 )
 from .tokenizer import (
-    BaseTokenizer, 
+    Tokenizer, 
     SphericalCoordinateTokenizer
 )
 from .trainer import OrbitTrainer

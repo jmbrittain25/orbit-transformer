@@ -148,5 +148,5 @@ if __name__ == "__main__":
     # run_dir = os.path.join("orbit_training_runs", "run_20250216_214057", "run_20250217_082010")
 
     run_dir = os.path.join("orbit_training_runs", "run_20250217_131852", "run_20250217_191849")
-
+    run_dir = None
     plot_learning_curves(run_dir=run_dir)

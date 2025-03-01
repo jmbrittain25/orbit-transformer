@@ -1,20 +1,13 @@
 import torch
 import torch.nn as nn
 
+from .transfer_model import TransferModel
 
-class ThreeTokenGPTConfig:
-    def __init__(
-        self,
-        r_vocab_size,
-        theta_vocab_size,
-        phi_vocab_size,
-        d_model=256,
-        n_heads=4,
-        n_layers=4,
-        d_ff=1024,
-        dropout=0.1,
-        max_seq_len=512
-    ):
+
+class ThreeTokenDecoderTransferModel(TransferModel):
+    def __init__(self, r_vocab_size=200, theta_vocab_size=180, phi_vocab_size=360, d_model=256,
+                 n_heads=4, n_layers=4, d_ff=1024, dropout=0.1, max_seq_len=512):
+        super().__init__()
         self.r_vocab_size = r_vocab_size
         self.theta_vocab_size = theta_vocab_size
         self.phi_vocab_size = phi_vocab_size
@@ -25,43 +18,32 @@ class ThreeTokenGPTConfig:
         self.dropout = dropout
         self.max_seq_len = max_seq_len
 
-
-class ThreeTokenGPTDecoder(nn.Module):
-    """
-    Decoder-only transformer where each time step is represented by 3 discrete tokens: (r, theta, phi).
-    We sum their embeddings + positional embedding to get a single d_model vector per time step.
-    """
-
-    def __init__(self, config: ThreeTokenGPTConfig):
-        super().__init__()
-        self.config = config
-
         # Separate embeddings
-        self.r_emb = nn.Embedding(config.r_vocab_size, config.d_model)
-        self.theta_emb = nn.Embedding(config.theta_vocab_size, config.d_model)
-        self.phi_emb = nn.Embedding(config.phi_vocab_size, config.d_model)
+        self.r_emb = nn.Embedding(r_vocab_size, d_model)
+        self.theta_emb = nn.Embedding(theta_vocab_size, d_model)
+        self.phi_emb = nn.Embedding(phi_vocab_size, d_model)
 
         # Positional embedding (learnable)
-        self.pos_emb = nn.Parameter(torch.zeros(1, config.max_seq_len, config.d_model))
+        self.pos_emb = nn.Parameter(torch.zeros(1, max_seq_len, d_model))
 
-        self.drop = nn.Dropout(config.dropout)
+        self.drop = nn.Dropout(dropout)
 
         # Transformer Decoder
         decoder_layer = nn.TransformerDecoderLayer(
-            d_model=config.d_model,
-            nhead=config.n_heads,
-            dim_feedforward=config.d_ff,
-            dropout=config.dropout,
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_ff,
+            dropout=dropout,
             activation='gelu'
         )
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=config.n_layers)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=n_layers)
 
         # Final output: we might want 3 separate predictions (one for r, one for theta, one for phi),
         # or unify them into one big classification step. 
         # Here we demonstrate a single output for each dimension:
-        self.r_head = nn.Linear(config.d_model, config.r_vocab_size)
-        self.theta_head = nn.Linear(config.d_model, config.theta_vocab_size)
-        self.phi_head = nn.Linear(config.d_model, config.phi_vocab_size)
+        self.r_head = nn.Linear(d_model, r_vocab_size)
+        self.theta_head = nn.Linear(d_model, theta_vocab_size)
+        self.phi_head = nn.Linear(d_model, phi_vocab_size)
 
         self._init_weights()
 
@@ -72,7 +54,6 @@ class ThreeTokenGPTDecoder(nn.Module):
         nn.init.normal_(self.r_head.weight, mean=0.0, std=0.02)
         nn.init.normal_(self.theta_head.weight, mean=0.0, std=0.02)
         nn.init.normal_(self.phi_head.weight, mean=0.0, std=0.02)
-        # pos_emb is zero-initialized
 
     def forward(self, r_tokens, theta_tokens, phi_tokens):
         """
@@ -102,7 +83,7 @@ class ThreeTokenGPTDecoder(nn.Module):
         causal_mask = causal_mask.masked_fill(causal_mask, float('-inf'))
 
         # Create a dummy memory with correct shape for decoder
-        memory = x.new_zeros((1, B, self.config.d_model))  # (1, B, d_model)
+        memory = x.new_zeros((1, B, self.d_model))  # (1, B, d_model)
         
         out = self.decoder(
             x,                      # (T, B, d_model)
@@ -121,3 +102,16 @@ class ThreeTokenGPTDecoder(nn.Module):
 
         return r_logits, theta_logits, phi_logits
     
+    def to_dict(self):
+        return {
+            "class_name": "ThreeTokenGPTDecoder",
+            "r_vocab_size": self.r_vocab_size,
+            "theta_vocab_size": self.theta_vocab_size,
+            "phi_vocab_size": self.phi_vocab_size,
+            "d_model": self.d_model,
+            "n_heads": self.n_heads,
+            "n_layers": self.n_layers,
+            "d_ff": self.d_ff,
+            "dropout": self.dropout,
+            "max_seq_len": self.max_seq_len
+        }

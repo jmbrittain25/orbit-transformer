@@ -8,7 +8,9 @@ from datetime import datetime
 import logging
 from tqdm import tqdm
 
-from ..loss import OrbitLossWrapper
+from ..loss_model import LossModel
+from ..dataset import OrbitTokenDataset
+from ..transfer_model import TransferModel
 
 
 def collate_fn(batch):
@@ -60,21 +62,23 @@ class OrbitTrainer:
     """
     
     def __init__(self,
-                 model: torch.nn.Module,
-                 loss_fn: OrbitLossWrapper,
-                 train_dataset: torch.utils.data.Dataset,
-                 val_dataset: Optional[torch.utils.data.Dataset] = None,
+                 transfer_model: TransferModel,
+                 loss_model: LossModel,
+                 train_dataset: OrbitTokenDataset,
+                 val_dataset: OrbitTokenDataset,
                  lr: float = 1e-4,
                  batch_size: int = 16,
                  num_workers: int = 0,
                  device: str = 'cpu',
                  log_dir: str = 'runs'):
         
-        if not isinstance(loss_fn, OrbitLossWrapper):
-            raise TypeError("loss_fn must be an instance of OrbitLossWrapper")
-            
-        self.model = model
-        self.loss_fn = loss_fn
+        self.transfer_model = transfer_model
+        self.loss_model = loss_model
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.lr = lr
+        self.batch_size = batch_size
+        self.num_workers = num_workers
         self.device = device
         self.global_step = 0
         
@@ -98,19 +102,17 @@ class OrbitTrainer:
             collate_fn=collate_fn
         )
         
-        self.val_loader = None
-        if val_dataset is not None:
-            self.val_loader = DataLoader(
-                val_dataset,
-                batch_size=batch_size,
-                shuffle=False,
-                num_workers=num_workers,
-                drop_last=True,
-                collate_fn=collate_fn
-            )
+        self.val_loader = DataLoader(
+            val_dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            drop_last=True,
+            collate_fn=collate_fn
+        )
         
         # Optimizer
-        self.optimizer = optim.AdamW(model.parameters(), lr=lr)
+        self.optimizer = optim.AdamW(transfer_model.parameters(), lr=lr)
         
         # Metrics history
         self.history = {
@@ -130,7 +132,7 @@ class OrbitTrainer:
         """Save model checkpoint and training state"""
         checkpoint = {
             'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': self.transfer_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
             'global_step': self.global_step
@@ -162,7 +164,7 @@ class OrbitTrainer:
         history : Dict[str, Any]
             Training history containing losses and metrics
         """
-        self.model.to(self.device)
+        self.transfer_model.to(self.device)
         best_val_loss = float('inf')
         
         for epoch in range(1, epochs + 1):
@@ -215,7 +217,7 @@ class OrbitTrainer:
                   log_every: Optional[int] = None) -> Dict[str, float]:
         """Run one epoch of training or validation"""
         
-        self.model.train(training)
+        self.transfer_model.train(training)
         torch.set_grad_enabled(training)
         
         total_metrics = {}
@@ -235,8 +237,8 @@ class OrbitTrainer:
             }
             
             # Forward pass
-            logits = self.model(r_input, theta_input, phi_input)
-            loss, batch_metrics = self.loss_fn(logits, targets)
+            logits = self.transfer_model(r_input, theta_input, phi_input)
+            loss, batch_metrics = self.loss_model(logits, targets)
             
             # Backward pass and optimization
             if training:
@@ -265,3 +267,17 @@ class OrbitTrainer:
         
         # Compute epoch averages
         return {k: v / num_batches for k, v in total_metrics.items()}
+
+    def to_dict(self):
+        return {
+            "transfer_model": self.transfer_model.to_dict(),
+            "loss_model": self.loss_model.to_dict(),
+            "train_dataset": self.train_dataset.to_dict(),
+            "val_dataset": self.val_dataset.to_dict(),
+            "lr": self.lr,
+            "batch_size": self.batch_size,
+            "num_workers": self.num_workers,
+            "device": self.device,
+            "log_dir": self.log_dir
+        }
+    

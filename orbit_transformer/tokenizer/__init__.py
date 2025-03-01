@@ -1,2 +1,2 @@
-from .base_tokenizer import BaseTokenizer
+from .tokenizer import Tokenizer
 from .spherical_coordinate_tokenizer import SphericalCoordinateTokenizer

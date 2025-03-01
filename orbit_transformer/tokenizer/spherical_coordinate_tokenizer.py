@@ -1,26 +1,10 @@
 import numpy as np
-import pandas as pd
 
 from ..constants import MIN_R_MAG, MAX_R_MAG, KILOMETER
-from .base_tokenizer import BaseTokenizer
+from .tokenizer import Tokenizer
 
 
-class SphericalCoordinateTokenizer(BaseTokenizer):
-    """
-    Tokenize (r, theta, phi) columns into discrete bins. Also supports:
-      - Visualizing ALL possible bin centers in 3D (the entire discretized space).
-      - Optionally creating a single "composite token" for (r_bin, theta_bin, phi_bin).
-
-    Attributes
-    ----------
-    r_bins, theta_bins, phi_bins : int
-        Number of bins for each dimension.
-    r_edges, theta_edges, phi_edges : np.ndarray
-        Bin edges for each dimension.
-    composite_tokens : bool
-        If True, we'll produce a single integer token for each (r_bin, theta_bin, phi_bin).
-        If False, we produce separate columns r_token, theta_token, phi_token.
-    """
+class SphericalCoordinateTokenizer(Tokenizer):
 
     def __init__(
         self,
@@ -59,13 +43,6 @@ class SphericalCoordinateTokenizer(BaseTokenizer):
             self.total_vocab_size = None  # Not strictly necessary if we keep them separate
 
     def transform(self, df, coordinate_prefix="eci"):
-        """
-        Adds new integer columns to df:
-          If composite_tokens = False:
-            <prefix>_r_token, <prefix>_theta_token, <prefix>_phi_token
-          If composite_tokens = True:
-            <prefix>_composite_token
-        """
         r_col = f"r_{coordinate_prefix}_km"
         theta_col = f"theta_{coordinate_prefix}_deg"
         phi_col = f"phi_{coordinate_prefix}_deg"
@@ -164,6 +141,22 @@ class SphericalCoordinateTokenizer(BaseTokenizer):
         ax.set_zlim(mid_z - max_range/2, mid_z + max_range/2)
 
         plt.show()
+
+    def to_dict(self):
+        return {
+            "class_name": "SphericalCoordinateTokenizer",
+            "r_bins": self.r_bins,
+            "theta_bins": self.theta_bins,
+            "phi_bins": self.phi_bins,
+            "r_min": self.r_min,
+            "r_max": self.r_max,
+            "theta_min": self.theta_min,
+            "theta_max": self.theta_max,
+            "phi_min": self.phi_min,
+            "phi_max": self.phi_max,
+            "composite_tokens": self.composite_tokens
+        }
+
 
 # Utility: spherical -> cartesian
 def spherical_to_cartesian(r, theta_deg, phi_deg):

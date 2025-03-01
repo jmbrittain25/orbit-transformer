@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # Configure loss
     loss_config = ot.LossConfig(
         cross_entropy_weight=1.0,
-        position_weight=5.0,
+        position_weight=100.0,
         r_weight=1.0,
         theta_weight=1.0,
         phi_weight=1.0
@@ -59,8 +59,8 @@ if __name__ == "__main__":
 
     # Create trainer
     trainer = ot.OrbitTrainer(
-        model=model,
-        loss_fn=loss_fn,
+        transfer_model=model,
+        loss_model=loss_fn,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         lr=1e-4,
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # Train
     print("Starting training...")
     history = trainer.train(
-        epochs=10,
+        epochs=20,
         save_every=1,     # Save checkpoint every epoch
         log_every=100     # Log metrics every 100 batches
     )

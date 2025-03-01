@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -127,6 +126,19 @@ class OrbitTokenDataset(Dataset):
         return {
             "input": input_seq_tensor.squeeze(-1),   # shape (input_length,) if composite
             "output": output_seq_tensor.squeeze(-1)  # shape (output_length,)
+        }
+
+    def to_dict(self):
+        return {
+            "csv_path": self.csv_path,
+            "input_length": self.input_length,
+            "output_length": self.output_length,
+            "stride": self.stride,
+            "token_col": self.token_col,
+            "time_col": self.time_col,
+            "orbit_id_col": self.orbit_id_col,
+            "groups": self.groups,
+            "examples": self.examples
         }
 
 
