@@ -9,13 +9,11 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    # Load paths from previous script
     total_raw_csv_path = os.path.join(".", "data", "orbits_dataset_1000_raw.csv")
     train_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "train_tokenized.csv")
     val_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "val_tokenized.csv")
     test_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "test_tokenized.csv")
 
-    # Create datasets
     train_dataset = ot.OrbitTokenDataset(
         csv_path=train_tokenized_csv_path,
         input_length=32,  # Context window of 32 timesteps
@@ -30,52 +28,43 @@ if __name__ == "__main__":
         stride=1
     )
 
-    # Configure model
-    config = ot.ThreeTokenGPTConfig(
-        r_vocab_size=200,      # Matches tokenizer.r_bins
-        theta_vocab_size=180,  # Matches tokenizer.theta_bins
-        phi_vocab_size=360,    # Matches tokenizer.phi_bins
-        d_model=256,           # Embedding dimension
-        n_heads=4,             # Number of attention heads
-        n_layers=4,            # Number of transformer layers
-        d_ff=1024,             # Feed-forward dimension
+    model = ot.ThreeTokenDecoderTransferModel(
+        r_vocab_size=200,
+        theta_vocab_size=180,
+        phi_vocab_size=360,
+        d_model=256,
+        n_heads=4,
+        n_layers=4,
+        d_ff=1024,
         dropout=0.1,
         max_seq_len=512
     )
 
-    # Create model
-    model = ot.ThreeTokenGPTDecoder(config)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Configure loss
-    loss_config = ot.LossConfig(
-        cross_entropy_weight=1.0,
-        position_weight=100.0,
+    loss_model = ot.PositionCrossEntropyLossModel(
         r_weight=1.0,
         theta_weight=1.0,
         phi_weight=1.0
     )
-    loss_fn = ot.OrbitLossWrapper(loss_config)
 
-    # Create trainer
     trainer = ot.OrbitTrainer(
         transfer_model=model,
-        loss_model=loss_fn,
+        loss_model=loss_model,
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         lr=1e-4,
         batch_size=32,
-        num_workers=0,  # Adjust based on your system
+        num_workers=0,
         device=device,
         log_dir='orbit_training_runs'
     )
 
-    # Train
     print("Starting training...")
     history = trainer.train(
-        epochs=20,
-        save_every=1,     # Save checkpoint every epoch
-        log_every=100     # Log metrics every 100 batches
+        epochs=1,
+        save_every=1,
+        log_every=100
     )
 
     print("Training complete!")

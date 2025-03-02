@@ -1,11 +1,10 @@
 import numpy as np
 
-from ..constants import MIN_R_MAG, MAX_R_MAG, KILOMETER
 from .tokenizer import Tokenizer
+from ..constants import MIN_R_MAG, MAX_R_MAG, KILOMETER
 
 
 class SphericalCoordinateTokenizer(Tokenizer):
-
     def __init__(
         self,
         r_bins=200,
@@ -16,8 +15,7 @@ class SphericalCoordinateTokenizer(Tokenizer):
         theta_min=0.0,
         theta_max=180.0,
         phi_min=-180.0,
-        phi_max=180.0,
-        composite_tokens=False
+        phi_max=180.0
     ):
         self.r_bins = r_bins
         self.theta_bins = theta_bins
@@ -28,19 +26,11 @@ class SphericalCoordinateTokenizer(Tokenizer):
         self.theta_max = theta_max
         self.phi_min = phi_min
         self.phi_max = phi_max
-        self.composite_tokens = composite_tokens
 
         # Precompute bin edges
-        self.r_edges     = np.linspace(r_min, r_max, r_bins + 1)
+        self.r_edges = np.linspace(r_min, r_max, r_bins + 1)
         self.theta_edges = np.linspace(theta_min, theta_max, theta_bins + 1)
-        self.phi_edges   = np.linspace(phi_min, phi_max, phi_bins + 1)
-
-        # If composite, we create an ID space for the triple
-        # total_vocabulary_size = r_bins * theta_bins * phi_bins
-        if composite_tokens:
-            self.total_vocab_size = self.r_bins * self.theta_bins * self.phi_bins
-        else:
-            self.total_vocab_size = None  # Not strictly necessary if we keep them separate
+        self.phi_edges = np.linspace(phi_min, phi_max, phi_bins + 1)
 
     def transform(self, df, coordinate_prefix="eci"):
         r_col = f"r_{coordinate_prefix}_km"
@@ -52,38 +42,26 @@ class SphericalCoordinateTokenizer(Tokenizer):
                 raise ValueError(f"Column {c} not found in DataFrame. Check data columns or prefix.")
 
         # Digitize each dimension
-        r_tokens     = np.digitize(df[r_col].values, self.r_edges) - 1
+        r_tokens = np.digitize(df[r_col].values, self.r_edges) - 1
         theta_tokens = np.digitize(df[theta_col].values, self.theta_edges) - 1
-        phi_tokens   = np.digitize(df[phi_col].values, self.phi_edges) - 1
+        phi_tokens = np.digitize(df[phi_col].values, self.phi_edges) - 1
 
         # Clip out-of-bounds
-        r_tokens     = np.clip(r_tokens, 0, self.r_bins - 1)
+        r_tokens = np.clip(r_tokens, 0, self.r_bins - 1)
         theta_tokens = np.clip(theta_tokens, 0, self.theta_bins - 1)
-        phi_tokens   = np.clip(phi_tokens, 0, self.phi_bins - 1)
+        phi_tokens = np.clip(phi_tokens, 0, self.phi_bins - 1)
 
-        if not self.composite_tokens:
-            # Add separate columns
-            df[f"{coordinate_prefix}_r_token"] = r_tokens
-            df[f"{coordinate_prefix}_theta_token"] = theta_tokens
-            df[f"{coordinate_prefix}_phi_token"] = phi_tokens
-        else:
-            # Create a single composite token ID:
-            # ID = r_bin + theta_bin * r_bins + phi_bin * (r_bins * theta_bins)
-            # This is basically enumerating the 3D grid in row-major order
-            composite = (r_tokens 
-                         + theta_tokens * self.r_bins 
-                         + phi_tokens  * (self.r_bins * self.theta_bins))
-            df[f"{coordinate_prefix}_composite_token"] = composite
+        # Add separate columns
+        df[f"{coordinate_prefix}_r_token"] = r_tokens
+        df[f"{coordinate_prefix}_theta_token"] = theta_tokens
+        df[f"{coordinate_prefix}_phi_token"] = phi_tokens
 
         return df
 
     def get_bin_centers(self):
-        """
-        Return the 1D arrays of bin centers for r, theta, phi.
-        """
-        r_centers     = 0.5 * (self.r_edges[:-1] + self.r_edges[1:])
+        r_centers = 0.5 * (self.r_edges[:-1] + self.r_edges[1:])
         theta_centers = 0.5 * (self.theta_edges[:-1] + self.theta_edges[1:])
-        phi_centers   = 0.5 * (self.phi_edges[:-1] + self.phi_edges[1:])
+        phi_centers = 0.5 * (self.phi_edges[:-1] + self.phi_edges[1:])
         return r_centers, theta_centers, phi_centers
 
     def visualize_all_bins_3d(self, coordinate_prefix="eci", max_points=50_000):
@@ -153,8 +131,7 @@ class SphericalCoordinateTokenizer(Tokenizer):
             "theta_min": self.theta_min,
             "theta_max": self.theta_max,
             "phi_min": self.phi_min,
-            "phi_max": self.phi_max,
-            "composite_tokens": self.composite_tokens
+            "phi_max": self.phi_max
         }
 
 

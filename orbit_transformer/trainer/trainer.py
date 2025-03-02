@@ -14,16 +14,12 @@ from ..transfer_model import TransferModel
 
 
 def collate_fn(batch):
-    # Separate the input sequences for r, theta, phi
     r_inputs = torch.stack([item['input'][:, 0] for item in batch])
     theta_inputs = torch.stack([item['input'][:, 1] for item in batch])
     phi_inputs = torch.stack([item['input'][:, 2] for item in batch])
-    
-    # Stack and separate the target sequences
     r_targets = torch.stack([item['output'][:, 0] for item in batch])
     theta_targets = torch.stack([item['output'][:, 1] for item in batch])
     phi_targets = torch.stack([item['output'][:, 2] for item in batch])
-    
     return {
         'r_input': r_inputs,
         'theta_input': theta_inputs,
@@ -60,18 +56,20 @@ class OrbitTrainer:
     log_dir : str
         Directory to save logs and checkpoints
     """
-    
-    def __init__(self,
-                 transfer_model: TransferModel,
-                 loss_model: LossModel,
-                 train_dataset: OrbitTokenDataset,
-                 val_dataset: OrbitTokenDataset,
-                 lr: float = 1e-4,
-                 batch_size: int = 16,
-                 num_workers: int = 0,
-                 device: str = 'cpu',
-                 log_dir: str = 'runs'):
-        
+
+    def __init__(
+        self,
+        transfer_model: TransferModel,
+        loss_model: LossModel,
+        train_dataset: OrbitTokenDataset,
+        val_dataset: OrbitTokenDataset,
+        lr: float = 1e-4,
+        batch_size: int = 16,
+        num_workers: int = 0,
+        device: str = 'cpu',
+        log_dir: str = 'runs'
+    ):
+
         self.transfer_model = transfer_model
         self.loss_model = loss_model
         self.train_dataset = train_dataset
@@ -81,18 +79,14 @@ class OrbitTrainer:
         self.num_workers = num_workers
         self.device = device
         self.global_step = 0
-        
-        # Setup logging
+
         self.log_dir = self._setup_logging(log_dir)
-        
-        # Initialize logger
         self.logger = logging.getLogger('orbit_trainer')
         self.logger.setLevel(logging.INFO)
         fh = logging.FileHandler(os.path.join(self.log_dir, 'training.log'))
         fh.setLevel(logging.INFO)
         self.logger.addHandler(fh)
-        
-        # DataLoaders
+
         self.train_loader = DataLoader(
             train_dataset,
             batch_size=batch_size,
@@ -101,7 +95,6 @@ class OrbitTrainer:
             drop_last=True,
             collate_fn=collate_fn
         )
-        
         self.val_loader = DataLoader(
             val_dataset,
             batch_size=batch_size,
@@ -110,17 +103,14 @@ class OrbitTrainer:
             drop_last=True,
             collate_fn=collate_fn
         )
-        
-        # Optimizer
+
         self.optimizer = optim.AdamW(transfer_model.parameters(), lr=lr)
-        
-        # Metrics history
         self.history = {
             'train_losses': [],
             'val_losses': [],
             'epoch_metrics': []
         }
-    
+
     def _setup_logging(self, base_dir: str) -> str:
         """Setup logging directory with timestamp"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -129,7 +119,6 @@ class OrbitTrainer:
         return log_dir
     
     def save_checkpoint(self, epoch: int, metrics: Dict[str, float]):
-        """Save model checkpoint and training state"""
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.transfer_model.state_dict(),
@@ -137,80 +126,38 @@ class OrbitTrainer:
             'metrics': metrics,
             'global_step': self.global_step
         }
-        
         checkpoint_path = os.path.join(self.log_dir, f'checkpoint_epoch_{epoch}.pt')
         torch.save(checkpoint, checkpoint_path)
-        
-        # Save latest metrics
         metrics_path = os.path.join(self.log_dir, 'metrics.json')
         with open(metrics_path, 'w') as f:
             json.dump(self.history, f, indent=2)
-    
+
     def train(self, epochs: int = 10, save_every: int = 1, log_every: int = 100) -> Dict[str, Any]:
-        """
-        Train the model for the specified number of epochs.
-        
-        Parameters
-        ----------
-        epochs : int
-            Number of epochs to train
-        save_every : int
-            Save checkpoint every N epochs
-        log_every : int
-            Log metrics every N steps
-            
-        Returns
-        -------
-        history : Dict[str, Any]
-            Training history containing losses and metrics
-        """
         self.transfer_model.to(self.device)
         best_val_loss = float('inf')
-        
+
         for epoch in range(1, epochs + 1):
             self.logger.info(f"=== Starting Epoch {epoch}/{epochs} ===")
-            
-            # Training phase
-            train_metrics = self.run_epoch(
-                self.train_loader, 
-                training=True,
-                log_every=log_every
-            )
+
+            train_metrics = self.run_epoch(self.train_loader, training=True, log_every=log_every)
             self.history['train_losses'].append(train_metrics['loss/total'])
-            
-            # Validation phase
-            val_metrics = None
-            if self.val_loader:
-                val_metrics = self.run_epoch(
-                    self.val_loader,
-                    training=False
-                )
-                self.history['val_losses'].append(val_metrics['loss/total'])
-                
-                # Save best model
-                if val_metrics['loss/total'] < best_val_loss:
-                    best_val_loss = val_metrics['loss/total']
-                    self.save_checkpoint(epoch, {
-                        'train': train_metrics,
-                        'val': val_metrics,
-                        'best_val_loss': best_val_loss
-                    })
-            
-            # Log epoch metrics
-            epoch_metrics = {
-                'epoch': epoch,
-                'train': train_metrics,
-                'val': val_metrics
-            }
+
+            val_metrics = self.run_epoch(self.val_loader, training=False)
+            self.history['val_losses'].append(val_metrics['loss/total'])
+
+            if val_metrics['loss/total'] < best_val_loss:
+                best_val_loss = val_metrics['loss/total']
+                self.save_checkpoint(epoch, {'train': train_metrics, 'val': val_metrics, 'best_val_loss': best_val_loss})
+
+            epoch_metrics = {'epoch': epoch, 'train': train_metrics, 'val': val_metrics}
             self.history['epoch_metrics'].append(epoch_metrics)
             self.logger.info(f"Epoch {epoch} metrics: {epoch_metrics}")
-            
-            # Regular checkpoint saving
+
             if epoch % save_every == 0:
                 self.save_checkpoint(epoch, epoch_metrics)
-        
+
         return self.history
-    
+
     def run_epoch(self, 
                   loader: DataLoader,
                   training: bool = True,

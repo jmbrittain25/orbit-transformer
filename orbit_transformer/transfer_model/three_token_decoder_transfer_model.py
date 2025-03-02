@@ -91,7 +91,6 @@ class ThreeTokenDecoderTransferModel(TransferModel):
             tgt_mask=causal_mask
         )  # (T, B, d_model)
 
-
         # Back to (B, T, d_model)
         out = out.permute(1, 0, 2)
 
