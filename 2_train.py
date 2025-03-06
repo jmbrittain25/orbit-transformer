@@ -127,6 +127,8 @@ if __name__ == "__main__":
     # For simplicity, let’s run a smaller experiment by fixing most parameters
     # and varying only a few (e.g., learning_rate and batch_size)
     fixed_params = {
+        'learning_rate': 1e-4,
+        'batch_size': 32,
         'n_layers': 4,
         'n_heads': 4,
         'input_length': 32,
@@ -139,19 +141,16 @@ if __name__ == "__main__":
 
     # Generate combinations of the varying parameters
     varying_params = {
-        'learning_rate': hyperparam_grids['learning_rate'],
-        'batch_size': hyperparam_grids['batch_size'],
-        # 'input_length': hyperparam_grids['input_length'],
-        # 'dataset_size': hyperparam_grids['dataset_size'],
-        # 'r_bins': hyperparam_grids['r_bins'],
+        'n_layers': hyperparam_grids['n_layers'],
+        'n_heads': hyperparam_grids['n_heads'],
     }
 
     # Iterate over all combinations of the varying parameters
-    for lr, bs in product(varying_params['learning_rate'], varying_params['batch_size']):
+    for nl, nh in product(varying_params['n_layers'], varying_params['n_heads']):
         # Combine fixed and varying hyperparameters
         current_hyperparams = fixed_params.copy()
-        current_hyperparams['learning_rate'] = lr
-        current_hyperparams['batch_size'] = bs
+        current_hyperparams['n_layers'] = nl
+        current_hyperparams['n_heads'] = nh
 
         # Run the experiment
         run_experiment(trade_name, current_hyperparams)
