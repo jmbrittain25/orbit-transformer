@@ -108,14 +108,14 @@ def run_experiment(trade_name, hyperparams):
 
 if __name__ == "__main__":
 
-    trade_name = "20250302_learning_rate_batch_trade_v1"
+    trade_name = "20250302_learning_rate_batch_trade_v2"
 
     # Define hyperparameter grids directly in Python
     hyperparam_grids = {
         'learning_rate': [1e-5, 1e-4, 1e-3],
         'batch_size': [16, 32, 64],
         'n_layers': [2, 4, 6],
-        'n_heads': [4, 8, 12],
+        'n_heads': [4, 8, 16],
         'input_length': [16, 32, 64],
         'dataset_size': [100, 500, 1_000],
         'r_bins': [100, 500, 1_000],
