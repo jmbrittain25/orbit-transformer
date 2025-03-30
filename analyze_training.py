@@ -34,7 +34,9 @@ def plot_loss_curves(runs_data, output_dir, plot_type="both"):
     plt.figure(figsize=(12, 8))
     
     for run in runs_data:
-        label = f"lr={run['hyperparams']['learning_rate']}, bs={run['hyperparams']['batch_size']}"
+        # label = f"lr={run['hyperparams']['learning_rate']}, bs={run['hyperparams']['batch_size']}"
+
+        label = f"nl={run['hyperparams']['n_layers']}, nh={run['hyperparams']['n_heads']}"
         epochs = range(1, len(run['metrics']['train_losses']) + 1)
         
         if plot_type in ["train", "both"]:
@@ -51,30 +53,58 @@ def plot_loss_curves(runs_data, output_dir, plot_type="both"):
     plt.savefig(os.path.join(output_dir, f"loss_curves_{plot_type}.png"))
     plt.close()
 
+# def plot_final_val_loss_heatmap(runs_data, output_dir):
+#     """Create a heatmap of final validation loss across learning rates and batch sizes."""
+#     # Extract data for heatmap
+#     learning_rates = sorted(set(run['hyperparams']['learning_rate'] for run in runs_data))
+#     batch_sizes = sorted(set(run['hyperparams']['batch_size'] for run in runs_data))
+    
+#     heatmap_data = np.zeros((len(learning_rates), len(batch_sizes)))
+    
+#     for i, lr in enumerate(learning_rates):
+#         for j, bs in enumerate(batch_sizes):
+#             for run in runs_data:
+#                 if run['hyperparams']['learning_rate'] == lr and run['hyperparams']['batch_size'] == bs:
+#                     heatmap_data[i, j] = run['final_val_loss']
+#                     break
+    
+#     plt.figure(figsize=(10, 8))
+#     sns.heatmap(heatmap_data, annot=True, fmt=".4f", xticklabels=batch_sizes, yticklabels=learning_rates,
+#                 cmap="YlGnBu", cbar_kws={'label': 'Final Validation Loss'})
+#     plt.title("Final Validation Loss Heatmap")
+#     plt.xlabel("Batch Size")
+#     plt.ylabel("Learning Rate")
+#     plt.tight_layout()
+#     plt.savefig(os.path.join(output_dir, "final_val_loss_heatmap.png"))
+#     plt.close()
+
+
+
 def plot_final_val_loss_heatmap(runs_data, output_dir):
-    """Create a heatmap of final validation loss across learning rates and batch sizes."""
+    """Create a heatmap of final validation loss across n_layers and n_heads."""
     # Extract data for heatmap
-    learning_rates = sorted(set(run['hyperparams']['learning_rate'] for run in runs_data))
-    batch_sizes = sorted(set(run['hyperparams']['batch_size'] for run in runs_data))
+    n_layers = sorted(set(run['hyperparams']['n_layers'] for run in runs_data))
+    n_heads = sorted(set(run['hyperparams']['n_heads'] for run in runs_data))
     
-    heatmap_data = np.zeros((len(learning_rates), len(batch_sizes)))
+    heatmap_data = np.zeros((len(n_layers), len(n_heads)))
     
-    for i, lr in enumerate(learning_rates):
-        for j, bs in enumerate(batch_sizes):
+    for i, layers in enumerate(n_layers):
+        for j, heads in enumerate(n_heads):
             for run in runs_data:
-                if run['hyperparams']['learning_rate'] == lr and run['hyperparams']['batch_size'] == bs:
+                if run['hyperparams']['n_layers'] == layers and run['hyperparams']['n_heads'] == heads:
                     heatmap_data[i, j] = run['final_val_loss']
                     break
     
     plt.figure(figsize=(10, 8))
-    sns.heatmap(heatmap_data, annot=True, fmt=".4f", xticklabels=batch_sizes, yticklabels=learning_rates,
+    sns.heatmap(heatmap_data, annot=True, fmt=".4f", xticklabels=n_heads, yticklabels=n_layers,
                 cmap="YlGnBu", cbar_kws={'label': 'Final Validation Loss'})
     plt.title("Final Validation Loss Heatmap")
-    plt.xlabel("Batch Size")
-    plt.ylabel("Learning Rate")
+    plt.xlabel("Number of Heads")
+    plt.ylabel("Number of Layers")
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "final_val_loss_heatmap.png"))
     plt.close()
+
 
 def plot_component_losses(runs_data, output_dir):
     """Plot the component losses (r, theta, phi) for each run."""
@@ -152,7 +182,8 @@ def main(target_dir, output_dir):
 if __name__ == "__main__":
 
     # Directory where the runs are stored
-    trade_name = "20250302_learning_rate_batch_trade_v1"
+    # trade_name = "20250302_learning_rate_batch_trade_v1"
+    trade_name = "20250302_learning_rate_batch_trade_v2"
     target_dir = os.path.join("orbit_training_runs", trade_name)
 
     # Ensure output directory exists for saving plots
