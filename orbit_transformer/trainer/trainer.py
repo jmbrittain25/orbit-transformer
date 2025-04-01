@@ -13,6 +13,9 @@ from ..dataset import OrbitTokenDataset
 from ..transfer_model import TransferModel
 
 
+# TODO - update code to support position and velocity components for spherical and cartesian
+
+
 def collate_fn(batch):
     r_inputs = torch.stack([item['input'][:, 0] for item in batch])
     theta_inputs = torch.stack([item['input'][:, 1] for item in batch])
