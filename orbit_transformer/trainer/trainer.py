@@ -13,51 +13,69 @@ from ..dataset import OrbitTokenDataset
 from ..transfer_model import TransferModel
 
 
-# TODO - update code to support position and velocity components for spherical and cartesian
-
-
 def collate_fn(batch):
-    r_inputs = torch.stack([item['input'][:, 0] for item in batch])
-    theta_inputs = torch.stack([item['input'][:, 1] for item in batch])
-    phi_inputs = torch.stack([item['input'][:, 2] for item in batch])
-    r_targets = torch.stack([item['output'][:, 0] for item in batch])
-    theta_targets = torch.stack([item['output'][:, 1] for item in batch])
-    phi_targets = torch.stack([item['output'][:, 2] for item in batch])
+    """
+    Collate function to handle six-token sequences (position and velocity).
+    Assumes each item in batch has 'input' and 'output' tensors of shape (seq_len, 6).
+    
+    Args:
+        batch: List of dicts, each with 'input' and 'output' keys.
+    
+    Returns:
+        Dict with six input tensors (B, T) and six target tensors (B, output_length).
+    """
+    pos1_inputs = torch.stack([item['input'][:, 0] for item in batch])
+    pos2_inputs = torch.stack([item['input'][:, 1] for item in batch])
+    pos3_inputs = torch.stack([item['input'][:, 2] for item in batch])
+    vel1_inputs = torch.stack([item['input'][:, 3] for item in batch])
+    vel2_inputs = torch.stack([item['input'][:, 4] for item in batch])
+    vel3_inputs = torch.stack([item['input'][:, 5] for item in batch])
+    pos1_targets = torch.stack([item['output'][:, 0] for item in batch])
+    pos2_targets = torch.stack([item['output'][:, 1] for item in batch])
+    pos3_targets = torch.stack([item['output'][:, 2] for item in batch])
+    vel1_targets = torch.stack([item['output'][:, 3] for item in batch])
+    vel2_targets = torch.stack([item['output'][:, 4] for item in batch])
+    vel3_targets = torch.stack([item['output'][:, 5] for item in batch])
     return {
-        'r_input': r_inputs,
-        'theta_input': theta_inputs,
-        'phi_input': phi_inputs,
-        'r_target': r_targets,
-        'theta_target': theta_targets,
-        'phi_target': phi_targets
+        'pos1_input': pos1_inputs,
+        'pos2_input': pos2_inputs,
+        'pos3_input': pos3_inputs,
+        'vel1_input': vel1_inputs,
+        'vel2_input': vel2_inputs,
+        'vel3_input': vel3_inputs,
+        'pos1_target': pos1_targets,
+        'pos2_target': pos2_targets,
+        'pos3_target': pos3_targets,
+        'vel1_target': vel1_targets,
+        'vel2_target': vel2_targets,
+        'vel3_target': vel3_targets
     }
-
 
 class OrbitTrainer:
     """
-    Trainer class specifically designed for orbital position prediction models
-    using the OrbitLossWrapper loss function.
+    Trainer class for orbital prediction models supporting six-token sequences
+    (position and velocity in spherical or Cartesian coordinates).
     
     Parameters
     ----------
-    model : torch.nn.Module
-        The model to train
-    loss_fn : OrbitLossWrapper
-        The loss function wrapper
-    train_dataset : torch.utils.data.Dataset
-        Training dataset
-    val_dataset : Optional[torch.utils.data.Dataset]
-        Validation dataset
+    transfer_model : TransferModel
+        The model to train.
+    loss_model : LossModel
+        The loss function.
+    train_dataset : OrbitTokenDataset
+        Training dataset.
+    val_dataset : OrbitTokenDataset
+        Validation dataset.
     lr : float
-        Learning rate
+        Learning rate.
     batch_size : int
-        Batch size for training
+        Batch size for training.
     num_workers : int
-        Number of workers for data loading
+        Number of workers for data loading.
     device : str
-        Device to train on ('cpu', 'cuda', 'mps')
+        Device to train on ('cpu', 'cuda', 'mps').
     log_dir : str
-        Directory to save logs and checkpoints
+        Directory to save logs and checkpoints.
     """
 
     def __init__(
@@ -72,7 +90,6 @@ class OrbitTrainer:
         device: str = 'cpu',
         log_dir: str = 'runs'
     ):
-
         self.transfer_model = transfer_model
         self.loss_model = loss_model
         self.train_dataset = train_dataset
@@ -115,13 +132,14 @@ class OrbitTrainer:
         }
 
     def _setup_logging(self, base_dir: str) -> str:
-        """Setup logging directory with timestamp"""
+        """Setup logging directory with timestamp."""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         log_dir = os.path.join(base_dir, f'run_{timestamp}')
         os.makedirs(log_dir, exist_ok=True)
         return log_dir
     
     def save_checkpoint(self, epoch: int, metrics: Dict[str, float]):
+        """Save model checkpoint and metrics."""
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.transfer_model.state_dict(),
@@ -136,6 +154,7 @@ class OrbitTrainer:
             json.dump(self.history, f, indent=2)
 
     def train(self, epochs: int = 10, save_every: int = 1, log_every: int = 100) -> Dict[str, Any]:
+        """Train the model for a specified number of epochs."""
         self.transfer_model.to(self.device)
         best_val_loss = float('inf')
 
@@ -165,8 +184,17 @@ class OrbitTrainer:
                   loader: DataLoader,
                   training: bool = True,
                   log_every: Optional[int] = None) -> Dict[str, float]:
-        """Run one epoch of training or validation"""
+        """
+        Run one epoch of training or validation.
         
+        Args:
+            loader: DataLoader for the epoch.
+            training: Whether to train or validate.
+            log_every: Log frequency during training.
+        
+        Returns:
+            Dict of average metrics for the epoch.
+        """
         self.transfer_model.train(training)
         torch.set_grad_enabled(training)
         
@@ -177,17 +205,29 @@ class OrbitTrainer:
         
         for batch_idx, batch in enumerate(progress_bar):
             # Move batch to device
-            r_input = batch['r_input'].to(self.device)
-            theta_input = batch['theta_input'].to(self.device)
-            phi_input = batch['phi_input'].to(self.device)
+            pos1_input = batch['pos1_input'].to(self.device)
+            pos2_input = batch['pos2_input'].to(self.device)
+            pos3_input = batch['pos3_input'].to(self.device)
+            vel1_input = batch['vel1_input'].to(self.device)
+            vel2_input = batch['vel2_input'].to(self.device)
+            vel3_input = batch['vel3_input'].to(self.device)
             targets = {
-                'r_target': batch['r_target'].to(self.device),
-                'theta_target': batch['theta_target'].to(self.device),
-                'phi_target': batch['phi_target'].to(self.device)
+                'pos1_target': batch['pos1_target'].to(self.device),
+                'pos2_target': batch['pos2_target'].to(self.device),
+                'pos3_target': batch['pos3_target'].to(self.device),
+                'vel1_target': batch['vel1_target'].to(self.device),
+                'vel2_target': batch['vel2_target'].to(self.device),
+                'vel3_target': batch['vel3_target'].to(self.device)
             }
             
+            # Debug logging for first batch
+            if batch_idx == 0:
+                self.logger.info(f"Input shapes: {pos1_input.shape}, {vel1_input.shape}")
+                self.logger.info(f"Target shapes: {targets['pos1_target'].shape}, {targets['vel1_target'].shape}")
+            
             # Forward pass
-            logits = self.transfer_model(r_input, theta_input, phi_input)
+            logits = self.transfer_model(pos1_input, pos2_input, pos3_input,
+                                         vel1_input, vel2_input, vel3_input)
             loss, batch_metrics = self.loss_model(logits, targets)
             
             # Backward pass and optimization
@@ -219,6 +259,7 @@ class OrbitTrainer:
         return {k: v / num_batches for k, v in total_metrics.items()}
 
     def to_dict(self):
+        """Serialize trainer configuration."""
         return {
             "transfer_model": self.transfer_model.to_dict(),
             "loss_model": self.loss_model.to_dict(),

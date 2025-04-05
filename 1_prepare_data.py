@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     target_dir = os.path.join(".", "data")
 
-    for n_orbits in [100, 500, 1_000, 5_000, 10_000]:  # , 50_000, 100_000
+    for n_orbits in [10_000]:  # 100, 500, 1_000, 5_000, , 50_000, 100_000
         for n_bins in [128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384]:
 
             make_datasets(target_dir, n_orbits, n_bins)

@@ -20,6 +20,8 @@ def run_experiment(args):
     dataset_size = args_dict["dataset_size"]
     n_bins = args_dict["n_bins"]
     coordinate_system = args_dict["coordinate_system"]
+    d_model = args_dict["d_model"]
+    d_ff = args_dict["d_ff"]
     epochs = args_dict["epochs"]
 
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -66,10 +68,10 @@ def run_experiment(args):
         vel1_vocab_size=n_bins,
         vel2_vocab_size=n_bins,
         vel3_vocab_size=n_bins,
-        d_model=256,        # TODO - make available in args
+        d_model=d_model,
         n_heads=n_heads,
         n_layers=n_layers,
-        d_ff=1024,          # TODO - make available in args
+        d_ff=d_ff,
         dropout=0.1,
         max_seq_len=512
     )
@@ -127,6 +129,8 @@ def main():
     parser.add_argument('--dataset_size', type=int, default=500, help="Number of orbits in the dataset.")
     parser.add_argument('--n_bins', type=int, default=128, help="Number of bins per component.")
     parser.add_argument('--coordinate_system', type=str, default='spherical', choices=['spherical', 'cartesian'], help="Coordinate system for tokens.")
+    parser.add_argument('--d_model', type=int, default=256, help="Dimension of the model embeddings.")
+    parser.add_argument('--d_ff', type=int, default=1024, help="Dimension of the feed-forward network.")
     parser.add_argument('--epochs', type=int, default=10, help="Number of training epochs.")
 
     args = parser.parse_args()
