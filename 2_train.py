@@ -2,6 +2,7 @@ import argparse
 import os
 import json
 import torch
+from datetime import datetime
 
 import orbit_transformer as ot
 
@@ -135,7 +136,12 @@ def main():
 
     args = parser.parse_args()
 
-    run_experiment(args)
+    try:
+        run_experiment(args)
+    except Exception as e:
+        print(f"Error in experiment with args {vars(args)}: {e}")
+        with open(os.path.join("orbit_training_runs", args.trade_name, "errors.log"), 'a') as f:
+            f.write(f"{datetime.now()} - Error with args {vars(args)}: {e}\n")
 
 if __name__ == "__main__":
     main()
