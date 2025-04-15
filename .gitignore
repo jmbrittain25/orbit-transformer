@@ -6,6 +6,7 @@
 /logs/
 /output/
 /orbit_training_runs/
+**/__pycache__/
 /.DS_Store/
 .DS_Store
 *.csv
