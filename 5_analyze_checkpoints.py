@@ -56,7 +56,6 @@ def calculate_trajectory_metrics(true_positions, predicted_positions):
     }
 
 
-# TODO - update to handle if num_steps is None (do all possible)
 def analyze_run(run_dir, val_raw_df, num_steps=None):
     """Analyze all checkpoints in a run directory, saving detailed prediction data."""
 
@@ -88,30 +87,16 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
         val_df, token_cols=token_cols, input_length=input_length, output_length=1, stride=1
     )
 
-    # ------------------------------------------------------------------------
-    # TODO - i dont think we need to do any checking b/c handled by dataset
-    # # Select sequences with enough future states
-    # valid_indices = [
-    #     i for i, (orbit_id, start_idx, end_idx, _) in enumerate(val_dataset.examples)
-    #     if end_idx + num_steps <= len(val_dataset.groups.get_group(orbit_id))
-    # ]
-
-    # # NOTE - just want to do all orbits, not just the number defined
-    # if len(valid_indices) < num_sequences:
-    #     print(f"Warning: Only {len(valid_indices)} valid sequences available, requested {num_sequences}")
-    #     num_sequences = len(valid_indices)
-
-    # indices = np.random.choice(valid_indices, num_sequences, replace=False)
-
-    # sequences = [val_dataset[i]['input'] for i in indices]
-    # selected_examples = [val_dataset.examples[i] for i in indices]
-    # ------------------------------------------------------------------------
-
+    # Get the sub dir the run is in
+    sub_dir = [x for x in os.listdir(run_dir) if "." not in x][0]
+    sub_dir = os.path.join(run_dir, sub_dir)
 
     # Process each checkpoint
-    checkpoint_files = [f for f in os.listdir(run_dir) if f.startswith('checkpoint_epoch_') and f.endswith('.pt')]
+    checkpoint_files = [f for f in os.listdir(sub_dir) if f.startswith('checkpoint_epoch_') and f.endswith('.pt')]
     for checkpoint_file in checkpoint_files:
-        checkpoint_path = os.path.join(run_dir, checkpoint_file)
+        print(checkpoint_file)
+
+        checkpoint_path = os.path.join(sub_dir, checkpoint_file)
         checkpoint = torch.load(checkpoint_path, map_location=device)
 
         # Load model
@@ -131,15 +116,19 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
         delta_vs = []
 
         with torch.no_grad():
-            # for seq_idx, (orbit_id, start_idx, end_idx, _) in enumerate(selected_examples):
             for idx, example in enumerate(val_dataset.examples):
-                (orbit_id, start_idx, end_idx, _) = example
-
-                # Retrieve true future states and metadata
+                orbit_id, start_idx, end_idx, _ = example
                 group_df = val_dataset.groups.get_group(orbit_id).sort_values('time_s')
 
-                # TODO - update to handle if num_steps is None (do all possible)
-                true_data = group_df.iloc[end_idx:end_idx + num_steps][[
+                # Calculate maximum possible steps
+                max_steps = len(group_df) - end_idx
+                effective_steps = max_steps if num_steps is None else min(num_steps, max_steps)
+
+                if effective_steps <= 0:
+                    continue  # Skip if no future steps available
+
+                # Retrieve true future states and metadata
+                true_data = group_df.iloc[end_idx:end_idx + effective_steps][[
                     'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
                     'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'time_s', 'sma_km', 'ecc', 'inc_deg',
                     'raan_deg', 'argp_deg', 'nu_deg'
@@ -151,18 +140,13 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                 current_seq = val_dataset[idx]['input'].clone().to(device)  # (input_length, 6)
                 pred_positions = []
 
-                # Initial state (last input state)
-
-                # TODO - why isnt this used?
-                initial_state = tokens_to_state_vector(current_seq[-1].cpu().numpy(), tokenizer, coordinate_system)
-                
                 initial_raw = group_df.iloc[end_idx - 1][[
                     'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
                     'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'sma_km', 'ecc', 'inc_deg',
                     'raan_deg', 'argp_deg', 'nu_deg'
                 ]].to_dict()
 
-                # TODO - why do we append this data? there's no information on out predictions, unless the goal is just to 
+                # Append initial state data (step=-1) for context
                 data.append({
                     'orbit_id': orbit_id,
                     'sequence_start_idx': start_idx,
@@ -189,7 +173,6 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                     'raw_raan_deg': initial_raw['raan_deg'],
                     'raw_argp_deg': initial_raw['argp_deg'],
                     'raw_nu_deg': initial_raw['nu_deg'],
-                    # Placeholder for prediction fields
                     'predicted_pos1_token': np.nan,
                     'predicted_pos2_token': np.nan,
                     'predicted_pos3_token': np.nan,
@@ -214,8 +197,7 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                     'velocity_match_delta_v_mag': np.nan
                 })
 
-                # TODO - update to handle if num_steps is None (do all possible)
-                for step in range(num_steps):
+                for step in range(effective_steps):
                     # Prepare input tokens
                     pos1_tokens = current_seq[:, 0].unsqueeze(0)
                     pos2_tokens = current_seq[:, 1].unsqueeze(0)
@@ -317,18 +299,17 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
             if all_true_positions and all_pred_positions:
                 metrics = calculate_trajectory_metrics(all_true_positions, all_pred_positions)
                 metrics['avg_delta_v_m_s'] = np.nanmean(delta_vs) if delta_vs else np.nan
-                with open(os.path.join(run_dir, f'analysis_metrics_{checkpoint_file}.json'), 'w') as f:
+                with open(os.path.join(sub_dir, f'analysis_metrics_{checkpoint_file}.json'), 'w') as f:
                     json.dump(metrics, f, indent=4)
 
         # Save to CSV
         df = pd.DataFrame(data)
-        csv_path = os.path.join(run_dir, f'analysis_{checkpoint_file}.csv')
+        csv_path = os.path.join(sub_dir, f'analysis_{checkpoint_file}.csv')
         df.to_csv(csv_path, index=False)
         print(f"Saved detailed analysis to {csv_path}")
 
 
-def main():
-
+if __name__ == "__main__":
     val_raw_path = os.path.join(".", "data", "HEO_only_val_dataset_100_orbits.csv")
     val_raw_df = pd.read_csv(val_raw_path)
 
@@ -344,8 +325,4 @@ def main():
             continue
 
         print(f"Processing {run_dir}")
-        analyze_run(run_dir, val_raw_df)
-
-
-if __name__ == "__main__":
-    main()
+        analyze_run(run_dir, val_raw_df, num_steps=5)
