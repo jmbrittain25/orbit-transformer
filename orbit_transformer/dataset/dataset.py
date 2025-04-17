@@ -34,7 +34,7 @@ class OrbitTokenDataset(Dataset):
         # Build examples
         for orbit_id, group_df in self.groups:
             group_df = group_df.sort_values(by=self.time_col)
-            tokens_array = group_df[self.token_cols].values  # Shape: (num_timesteps, 3)
+            tokens_array = group_df[self.token_cols].values  # Shape: (num_timesteps, num_components)
 
             total_len = tokens_array.shape[0]
             seq_len = input_length + output_length
