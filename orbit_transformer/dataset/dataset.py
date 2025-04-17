@@ -1,4 +1,3 @@
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
@@ -6,7 +5,7 @@ from torch.utils.data import Dataset
 class OrbitTokenDataset(Dataset):
     def __init__(
         self,
-        csv_path,
+        df,
         orbit_id_col="orbit_id",
         token_cols=None,
         time_col="time_s",
@@ -19,16 +18,12 @@ class OrbitTokenDataset(Dataset):
         if token_cols is None:
             token_cols = ["eci_r_token", "eci_theta_token", "eci_phi_token"]
 
-        self.csv_path = csv_path
         self.orbit_id_col = orbit_id_col
         self.time_col = time_col
         self.input_length = input_length
         self.output_length = output_length
         self.stride = stride
         self.token_cols = token_cols
-
-        # Load data
-        df = pd.read_csv(csv_path)
 
         # Group by orbit
         self.groups = df.groupby(orbit_id_col, sort=False)
@@ -74,7 +69,6 @@ class OrbitTokenDataset(Dataset):
 
     def to_dict(self):
         return {
-            "csv_path": self.csv_path,
             "input_length": self.input_length,
             "output_length": self.output_length,
             "stride": self.stride,

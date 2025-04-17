@@ -3,6 +3,7 @@ import os
 import json
 import torch
 from datetime import datetime
+import pandas as pd
 
 import orbit_transformer as ot
 
@@ -31,12 +32,6 @@ def run_experiment(args):
     total_raw_csv_path = os.path.join(".", "data", f"orbits_HEO_only_dataset_{dataset_size}_raw.csv")
     train_raw_csv_path = total_raw_csv_path.replace("total", "train")
     val_raw_csv_path = total_raw_csv_path.replace("total", "val")
-    train_tokenized_csv_path = train_raw_csv_path.replace("raw.csv", f"tokenized_{n_bins}_bins_per_component.csv")
-    val_tokenized_csv_path = val_raw_csv_path.replace("raw.csv", f"tokenized_{n_bins}_bins_per_component.csv")
-
-    if not os.path.exists(train_tokenized_csv_path):
-        print(f"Skipping experiment - tokenized data not found at {train_tokenized_csv_path}")
-        return
 
     if coordinate_system == 'spherical':
         token_cols = ["eci_r_token", "eci_theta_token", "eci_phi_token",
@@ -47,15 +42,25 @@ def run_experiment(args):
     else:
         raise ValueError("Coordinate system must be 'spherical' or 'cartesian'")
 
+    tokenizer = ot.MultiEciRepresentationTokenizer(
+        (n_bins, n_bins, n_bins), (n_bins, n_bins, n_bins),
+        (n_bins, n_bins, n_bins), (n_bins, n_bins, n_bins)
+    )
+
+    train_raw_df = pd.read_csv(train_raw_csv_path)
+    train_df = tokenizer.transform(train_raw_df)
     train_dataset = ot.OrbitTokenDataset(
-        csv_path=train_tokenized_csv_path,
+        train_df,
         token_cols=token_cols,
         input_length=input_length,
         output_length=1,
         stride=1
     )
+
+    val_raw_df = pd.read_csv(val_raw_csv_path)
+    val_df = tokenizer.transform(val_raw_df)
     val_dataset = ot.OrbitTokenDataset(
-        csv_path=val_tokenized_csv_path,
+        val_df,
         token_cols=token_cols,
         input_length=input_length,
         output_length=1,

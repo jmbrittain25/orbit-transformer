@@ -15,10 +15,6 @@ def make_datasets(target_dir, n_orbits, n_bins):
     val_raw_csv_path = total_raw_csv_path.replace("total", "val")
     test_raw_csv_path = total_raw_csv_path.replace("total", "test")
 
-    train_tokenized_csv_path = train_raw_csv_path.replace("raw.csv", f"tokenized_{n_bins}_bins_per_component.csv")
-    val_tokenized_csv_path = val_raw_csv_path.replace("raw.csv", f"tokenized_{n_bins}_bins_per_component.csv")
-    test_tokenized_csv_path = test_raw_csv_path.replace("raw.csv", f"tokenized_{n_bins}_bins_per_component.csv")
-
     if os.path.exists(total_raw_csv_path):
         df = pd.read_csv(total_raw_csv_path)
     else:
@@ -39,26 +35,6 @@ def make_datasets(target_dir, n_orbits, n_bins):
         df_train.to_csv(train_raw_csv_path, index=False)
         df_val.to_csv(val_raw_csv_path, index=False)
         df_test.to_csv(test_raw_csv_path, index=False)
-
-
-    if os.path.exists(train_tokenized_csv_path):
-        return
-
-    tokenizer = ot.MultiEciRepresentationTokenizer(
-        (n_bins, n_bins, n_bins),
-        (n_bins, n_bins, n_bins),
-        (n_bins, n_bins, n_bins),
-        (n_bins, n_bins, n_bins),
-    )
-
-    df_train_tokenized = tokenizer.transform(df_train)
-    df_train_tokenized.to_csv(train_tokenized_csv_path, index=False)
-
-    df_val_tokenized = tokenizer.transform(df_val)
-    df_val_tokenized.to_csv(val_tokenized_csv_path, index=False)
-
-    df_test_tokenized = tokenizer.transform(df_test)
-    df_test_tokenized.to_csv(test_tokenized_csv_path, index=False)
 
 
 if __name__ == "__main__":
@@ -82,10 +58,6 @@ if __name__ == "__main__":
     # val_raw_csv_path = total_raw_csv_path.replace("raw.csv", "val_raw.csv") 
     # test_raw_csv_path = total_raw_csv_path.replace("raw.csv", "test_raw.csv")
     
-    # train_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "train_tokenized.csv")
-    # val_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "val_tokenized.csv")
-    # test_tokenized_csv_path = total_raw_csv_path.replace("raw.csv", "test_tokenized.csv")
-
     # if generate_raw:
     #     df = ot.generate_orbits_dataset(
     #         n_orbits=1_000,
@@ -117,15 +89,3 @@ if __name__ == "__main__":
 
     #     if visualize_tokenizer:
     #         tokenizer.visualize_all_bins_3d()
-
-    #     df_train = pd.read_csv(train_raw_csv_path)
-    #     df_train_tokenized = tokenizer.transform(df_train)
-    #     df_train_tokenized.to_csv(train_tokenized_csv_path, index=False)
-
-    #     df_val = pd.read_csv(val_raw_csv_path)
-    #     df_val_tokenized = tokenizer.transform(df_val)
-    #     df_val_tokenized.to_csv(val_tokenized_csv_path, index=False)
-
-    #     df_test = pd.read_csv(test_raw_csv_path)
-    #     df_test_tokenized = tokenizer.transform(df_test)
-    #     df_test_tokenized.to_csv(test_tokenized_csv_path, index=False)

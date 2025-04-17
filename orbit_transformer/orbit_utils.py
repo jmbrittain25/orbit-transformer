@@ -7,7 +7,7 @@ from poliastro.twobody import Orbit
 from poliastro.maneuver import Maneuver
 from poliastro.iod import izzo
 
-from ..constants import (
+from .constants import (
     KILOMETER, MINUTE, HOUR, DAY, R_EARTH,
     MIN_R_MAG, MAX_R_MAG, MIN_V_MAG, MAX_V_MAG,
     MIN_THRUST, MAX_THRUST, MIN_TIME_STEP_SEC, MAX_TIME_STEP_SEC,
@@ -283,3 +283,25 @@ def dump_orbits_to_csv(path, orbit_dict):
         lines.append(line)
     with open(path, 'w') as f:
         f.writelines(lines)
+
+
+def spherical_to_cartesian(r, theta_deg, phi_deg):
+    theta = np.radians(theta_deg)
+    phi = np.radians(phi_deg)
+    x = r * np.sin(theta) * np.cos(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(theta)
+    return np.array([x, y, z])
+
+
+def spherical_velocity_to_cartesian(vr, vtheta, vphi, theta_deg, phi_deg):
+    theta = np.radians(theta_deg)
+    phi = np.radians(phi_deg)
+    sin_theta = np.sin(theta)
+    cos_theta = np.cos(theta)
+    sin_phi = np.sin(phi)
+    cos_phi = np.cos(phi)
+    vx = vr * sin_theta * cos_phi + vtheta * cos_theta * cos_phi - vphi * sin_phi
+    vy = vr * sin_theta * sin_phi + vtheta * cos_theta * sin_phi + vphi * cos_phi
+    vz = vr * cos_theta - vtheta * sin_theta
+    return np.array([vx, vy, vz])

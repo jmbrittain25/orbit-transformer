@@ -116,6 +116,51 @@ class MultiEciRepresentationTokenizer(Tokenizer):
 
         return df
 
+    def get_bin_centers(self):
+        """Return bin centers for all token types."""
+        # Spherical position bin centers
+        r_centers = 0.5 * (self.r_edges[:-1] + self.r_edges[1:])
+        theta_centers = 0.5 * (self.theta_edges[:-1] + self.theta_edges[1:])
+        phi_centers = 0.5 * (self.phi_edges[:-1] + self.phi_edges[1:])
+        
+        # Cartesian position bin centers
+        x_centers = 0.5 * (self.x_edges[:-1] + self.x_edges[1:])
+        y_centers = 0.5 * (self.y_edges[:-1] + self.y_edges[1:])
+        z_centers = 0.5 * (self.z_edges[:-1] + self.z_edges[1:])
+        
+        # Spherical velocity bin centers
+        vr_centers = 0.5 * (self.vr_edges[:-1] + self.vr_edges[1:])
+        vtheta_centers = 0.5 * (self.vtheta_edges[:-1] + self.vtheta_edges[1:])
+        vphi_centers = 0.5 * (self.vphi_edges[:-1] + self.vphi_edges[1:])
+        
+        # Cartesian velocity bin centers
+        vx_centers = 0.5 * (self.vx_edges[:-1] + self.vx_edges[1:])
+        vy_centers = 0.5 * (self.vy_edges[:-1] + self.vy_edges[1:])
+        vz_centers = 0.5 * (self.vz_edges[:-1] + self.vz_edges[1:])
+        
+        return {
+            "spherical_position": {
+                "r": r_centers,
+                "theta": theta_centers,
+                "phi": phi_centers
+            },
+            "cartesian_position": {
+                "x": x_centers,
+                "y": y_centers,
+                "z": z_centers
+            },
+            "spherical_velocity": {
+                "vr": vr_centers,
+                "vtheta": vtheta_centers,
+                "vphi": vphi_centers
+            },
+            "cartesian_velocity": {
+                "vx": vx_centers,
+                "vy": vy_centers,
+                "vz": vz_centers
+            }
+        }
+
     def to_dict(self):
         """Serialize parameters to a dictionary."""
         return {

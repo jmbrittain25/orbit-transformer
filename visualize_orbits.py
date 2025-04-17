@@ -68,16 +68,6 @@ def tokens_to_coordinates(r_token: int, theta_token: int, phi_token: int, tokeni
     
     return r, theta, phi
 
-def spherical_to_cartesian(r: float, theta_deg: float, phi_deg: float) -> Tuple[float, float, float]:
-    """Convert spherical coordinates to Cartesian."""
-    theta = np.radians(theta_deg)
-    phi = np.radians(phi_deg)
-    
-    x = r * np.sin(theta) * np.cos(phi)
-    y = r * np.sin(theta) * np.sin(phi)
-    z = r * np.cos(theta)
-    
-    return x, y, z
 
 def predict_trajectory(model, initial_sequence: torch.Tensor, num_steps: int, device: str) -> List[Tuple[int, int, int]]:
     """

@@ -8,6 +8,11 @@ class Tokenizer(ABC):
         pass
 
     @abstractmethod
+    def get_bin_centers(self):
+        """Return bin centers for all components."""
+        pass
+
+    @abstractmethod
     def to_dict(self):
         """Serialize parameters to a dictionary."""
         pass

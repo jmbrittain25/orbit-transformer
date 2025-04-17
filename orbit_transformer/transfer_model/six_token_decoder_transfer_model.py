@@ -5,6 +5,8 @@ from .transfer_model import TransferModel
 
 
 class SixTokenDecoderTransferModel(TransferModel):
+
+    # TODO - consider just passing the tokenizer?
     def __init__(self, pos1_vocab_size, pos2_vocab_size, pos3_vocab_size,
                  vel1_vocab_size, vel2_vocab_size, vel3_vocab_size,
                  d_model=256, n_heads=4, n_layers=4, d_ff=1024, dropout=0.1, max_seq_len=512):
