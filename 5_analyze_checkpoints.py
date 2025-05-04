@@ -56,7 +56,7 @@ def calculate_trajectory_metrics(true_positions, predicted_positions):
     }
 
 
-def analyze_run(run_dir, val_raw_df, num_steps=None):
+def analyze_run(run_dir, val_raw_df, num_samples=None, num_steps=None):
     """Analyze all checkpoints in a run directory, saving detailed prediction data."""
 
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -87,6 +87,20 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
         val_df, token_cols=token_cols, input_length=input_length, output_length=1, stride=1
     )
 
+    # Sample sequences per orbit
+    examples_by_orbit = {}
+    for idx, (orbit_id, start_idx, end_idx, _) in enumerate(val_dataset.examples):
+        if orbit_id not in examples_by_orbit:
+            examples_by_orbit[orbit_id] = []
+        examples_by_orbit[orbit_id].append(idx)
+
+    selected_indices = []
+    for orbit_id, indices in examples_by_orbit.items():
+        if num_samples is None or num_samples >= len(indices):
+            selected_indices.extend(indices)
+        else:
+            selected_indices.extend(np.random.choice(indices, size=num_samples, replace=False))
+
     # Get the sub dir the run is in
     sub_dir = [x for x in os.listdir(run_dir) if "." not in x][0]
     sub_dir = os.path.join(run_dir, sub_dir)
@@ -116,8 +130,8 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
         delta_vs = []
 
         with torch.no_grad():
-            for idx, example in enumerate(val_dataset.examples):
-                orbit_id, start_idx, end_idx, _ = example
+            for idx in selected_indices:
+                orbit_id, start_idx, end_idx, _ = val_dataset.examples[idx]
                 group_df = val_dataset.groups.get_group(orbit_id).sort_values('time_s')
 
                 # Calculate maximum possible steps
@@ -127,18 +141,7 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                 if effective_steps <= 0:
                     continue  # Skip if no future steps available
 
-                # Retrieve true future states and metadata
-                true_data = group_df.iloc[end_idx:end_idx + effective_steps][[
-                    'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
-                    'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'time_s', 'sma_km', 'ecc', 'inc_deg',
-                    'raan_deg', 'argp_deg', 'nu_deg'
-                ]]
-                true_states = true_data[['x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s']].values
-                true_positions = true_states[:, :3].tolist()
-                all_true_positions.extend(true_positions)
-
                 current_seq = val_dataset[idx]['input'].clone().to(device)  # (input_length, 6)
-                pred_positions = []
 
                 initial_raw = group_df.iloc[end_idx - 1][[
                     'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
@@ -197,6 +200,14 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                     'velocity_match_delta_v_mag': np.nan
                 })
 
+                # Retrieve true future states and metadata
+                true_data = group_df.iloc[end_idx:end_idx + effective_steps][[
+                    'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
+                    'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'time_s', 'sma_km', 'ecc', 'inc_deg',
+                    'raan_deg', 'argp_deg', 'nu_deg'
+                ]]
+
+                S_prev = tokens_to_state_vector(current_seq[-1].cpu().numpy(), tokenizer, coordinate_system)
                 for step in range(effective_steps):
                     # Prepare input tokens
                     pos1_tokens = current_seq[:, 0].unsqueeze(0)
@@ -210,36 +221,57 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                     logits = model(pos1_tokens, pos2_tokens, pos3_tokens, vel1_tokens, vel2_tokens, vel3_tokens)
                     predicted_tokens = torch.tensor([torch.argmax(logits[i][0, -1]).item() for i in range(6)], device=device)
 
-                    # Convert states
-                    S_prev = tokens_to_state_vector(current_seq[-1].cpu().numpy(), tokenizer, coordinate_system)
+                    # Convert predicted state
                     S_pred = tokens_to_state_vector(predicted_tokens.cpu().numpy(), tokenizer, coordinate_system)
-                    S_true = true_states[step]
-                    pred_positions.append(S_pred[:3].tolist())
+                    r_pred, v_pred = S_pred[:3], S_pred[3:]
+                    all_pred_positions.append(r_pred.tolist())
+
+                    dt = 60 * u.s
+
+                    # Propagate previous state to get true expected state
+                    r_prev, v_prev = S_prev[:3], S_prev[3:]
 
                     # Compute delta-v
-                    r_prev, v_prev = S_prev[:3], S_prev[3:]
-                    r_pred, v_pred = S_pred[:3], S_pred[3:]
-                    dt = 60 * u.s  # Fixed timestep
                     try:
                         v1, v2 = izzo.lambert(Earth.k, r_prev * u.km, r_pred * u.km, dt)
                         transfer_delta_v = (v1 - v_prev * u.km / u.s).to(u.m / u.s).value
                         velocity_match_delta_v = (v2 - v_pred * u.km / u.s).to(u.m / u.s).value
-                    except Exception as e:
-                        print(f"Lambert solver failed at step {step} for sequence {idx}: {e}")
-                        transfer_delta_v = np.array([np.nan, np.nan, np.nan])
-                        velocity_match_delta_v = np.array([np.nan, np.nan, np.nan])
+                    except ValueError as e:
+                        if "collinear vectors" in str(e):
+                            # Handle case where r_pred == r_prev (stay in place)
+                            transfer_delta_v = -v_prev * 1000  # Nullify velocity to stay put (m/s)
+                            velocity_match_delta_v = np.zeros(3)  # No velocity match needed
+                        else:
+                            print(f"Lambert solver failed at step {step} for sequence {idx}: {e}")
+                            transfer_delta_v = np.array([np.nan, np.nan, np.nan])
+                            velocity_match_delta_v = np.array([np.nan, np.nan, np.nan])
 
                     transfer_delta_v_mag = np.linalg.norm(transfer_delta_v) if not np.any(np.isnan(transfer_delta_v)) else np.nan
                     velocity_match_delta_v_mag = np.linalg.norm(velocity_match_delta_v) if not np.any(np.isnan(velocity_match_delta_v)) else np.nan
                     total_dv = transfer_delta_v_mag + velocity_match_delta_v_mag if not np.any(np.isnan([transfer_delta_v_mag, velocity_match_delta_v_mag])) else np.nan
                     delta_vs.append(total_dv)
 
-                    # Compute errors
-                    position_error = np.linalg.norm(S_true[:3] - S_pred[:3]) if not np.any(np.isnan(S_pred[:3])) else np.nan
-                    velocity_error = np.linalg.norm(S_true[3:] - S_pred[3:]) if not np.any(np.isnan(S_pred[3:])) else np.nan
+                    raw_data = true_data.iloc[step].to_dict()
+
+                    r_true = np.array([
+                        raw_data['x_eci_km'],
+                        raw_data['y_eci_km'],
+                        raw_data['z_eci_km']
+                    ], dtype=float)
+
+                    v_true = np.array([
+                        raw_data['vx_eci_km_s'],
+                        raw_data['vy_eci_km_s'],
+                        raw_data['vz_eci_km_s']
+                    ], dtype=float)
+
+                    all_true_positions.append(r_true.tolist())
+
+                    # Compute errors against propagated true state
+                    position_error = np.linalg.norm(r_true - r_pred) if not np.any(np.isnan(r_pred)) else np.nan
+                    velocity_error = np.linalg.norm(v_true - v_pred) if not np.any(np.isnan(v_pred)) else np.nan
 
                     # Store data
-                    raw_data = true_data.iloc[step].to_dict()
                     data.append({
                         'orbit_id': orbit_id,
                         'sequence_start_idx': start_idx,
@@ -266,18 +298,18 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                         'raw_raan_deg': raw_data['raan_deg'],
                         'raw_argp_deg': raw_data['argp_deg'],
                         'raw_nu_deg': raw_data['nu_deg'],
-                        'predicted_pos1_token': predicted_tokens[0].item(),
-                        'predicted_pos2_token': predicted_tokens[1].item(),
-                        'predicted_pos3_token': predicted_tokens[2].item(),
-                        'predicted_vel1_token': predicted_tokens[3].item(),
-                        'predicted_vel2_token': predicted_tokens[4].item(),
-                        'predicted_vel3_token': predicted_tokens[5].item(),
-                        'pred_x_eci_km': S_pred[0],
-                        'pred_y_eci_km': S_pred[1],
-                        'pred_z_eci_km': S_pred[2],
-                        'pred_vx_eci_km_s': S_pred[3],
-                        'pred_vy_eci_km_s': S_pred[4],
-                        'pred_vz_eci_km_s': S_pred[5],
+                        'pred_pos1_token': predicted_tokens[0].item(),
+                        'pred_pos2_token': predicted_tokens[1].item(),
+                        'pred_pos3_token': predicted_tokens[2].item(),
+                        'pred_vel1_token': predicted_tokens[3].item(),
+                        'pred_vel2_token': predicted_tokens[4].item(),
+                        'pred_vel3_token': predicted_tokens[5].item(),
+                        'pred_x_eci_km': r_pred[0],
+                        'pred_y_eci_km': r_pred[1],
+                        'pred_z_eci_km': r_pred[2],
+                        'pred_vx_eci_km_s': v_pred[0],
+                        'pred_vy_eci_km_s': v_pred[1],
+                        'pred_vz_eci_km_s': v_pred[2],
                         'position_error_km': position_error,
                         'velocity_error_km_s': velocity_error,
                         'transfer_delta_v_x': transfer_delta_v[0],
@@ -290,10 +322,9 @@ def analyze_run(run_dir, val_raw_df, num_steps=None):
                         'velocity_match_delta_v_mag': velocity_match_delta_v_mag
                     })
 
-                    # Update sequence
+                    # Update sequence and previous state
                     current_seq = torch.cat([current_seq[1:], predicted_tokens.unsqueeze(0)], dim=0)
-
-                all_pred_positions.extend(pred_positions)
+                    S_prev = S_pred  # Use predicted state for next iteration
 
             # Calculate trajectory metrics
             if all_true_positions and all_pred_positions:
@@ -325,4 +356,4 @@ if __name__ == "__main__":
             continue
 
         print(f"Processing {run_dir}")
-        analyze_run(run_dir, val_raw_df, num_steps=5)
+        analyze_run(run_dir, val_raw_df, num_samples=10, num_steps=5)

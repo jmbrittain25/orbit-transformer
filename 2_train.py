@@ -29,9 +29,8 @@ def run_experiment(args):
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    total_raw_csv_path = os.path.join(".", "data", f"orbits_HEO_only_dataset_{dataset_size}_raw.csv")
-    train_raw_csv_path = total_raw_csv_path.replace("total", "train")
-    val_raw_csv_path = total_raw_csv_path.replace("total", "val")
+    train_raw_csv_path = os.path.join(".", "data", f"orbits_HEO_only_dataset_{dataset_size}_raw.csv")
+    val_raw_csv_path = os.path.join(".", "data", "orbits_HEO_only_val_dataset_100_raw.csv")
 
     if coordinate_system == 'spherical':
         token_cols = ["eci_r_token", "eci_theta_token", "eci_phi_token",
