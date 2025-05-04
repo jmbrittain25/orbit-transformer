@@ -112,7 +112,6 @@ def run_experiment(args):
     print(f"Starting training with args: {args_dict}")
     history = trainer.train(
         epochs=epochs,
-        save_every=1,
         log_every=100
     )
     print(f"Training completed for args: {args_dict}")

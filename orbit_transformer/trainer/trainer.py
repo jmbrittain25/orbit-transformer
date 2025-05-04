@@ -138,7 +138,7 @@ class OrbitTrainer:
         os.makedirs(log_dir, exist_ok=True)
         return log_dir
     
-    def save_checkpoint(self, epoch: int, metrics: Dict[str, float]):
+    def save_checkpoint(self, epoch: int, metrics: Dict[str, float], is_best: bool = False):
         """Save model checkpoint and metrics."""
         checkpoint = {
             'epoch': epoch,
@@ -147,13 +147,13 @@ class OrbitTrainer:
             'metrics': metrics,
             'global_step': self.global_step
         }
-        checkpoint_path = os.path.join(self.log_dir, f'checkpoint_epoch_{epoch}.pt')
+        if is_best:
+            checkpoint_path = os.path.join(self.log_dir, 'best_checkpoint.pt')
+        else:
+            checkpoint_path = os.path.join(self.log_dir, f'checkpoint_epoch_{epoch}.pt')
         torch.save(checkpoint, checkpoint_path)
-        metrics_path = os.path.join(self.log_dir, 'metrics.json')
-        with open(metrics_path, 'w') as f:
-            json.dump(self.history, f, indent=2)
 
-    def train(self, epochs: int = 10, save_every: int = 1, log_every: int = 100) -> Dict[str, Any]:
+    def train(self, epochs: int = 10, save_every: int = None, log_every: int = 100) -> Dict[str, Any]:
         """Train the model for a specified number of epochs."""
         self.transfer_model.to(self.device)
         best_val_loss = float('inf')
@@ -167,16 +167,25 @@ class OrbitTrainer:
             val_metrics = self.run_epoch(self.val_loader, training=False)
             self.history['val_losses'].append(val_metrics['loss/total'])
 
+            # Save best checkpoint if validation loss improves
             if val_metrics['loss/total'] < best_val_loss:
                 best_val_loss = val_metrics['loss/total']
-                self.save_checkpoint(epoch, {'train': train_metrics, 'val': val_metrics, 'best_val_loss': best_val_loss})
+                self.save_checkpoint(epoch, {'train': train_metrics, 'val': val_metrics, 'best_val_loss': best_val_loss}, is_best=True)
+                self.logger.info(f"New best validation loss: {best_val_loss:.4f}, saved best_checkpoint.pt")
 
             epoch_metrics = {'epoch': epoch, 'train': train_metrics, 'val': val_metrics}
             self.history['epoch_metrics'].append(epoch_metrics)
             self.logger.info(f"Epoch {epoch} metrics: {epoch_metrics}")
 
+            if save_every is None:
+                continue
+
             if epoch % save_every == 0:
                 self.save_checkpoint(epoch, epoch_metrics)
+
+        metrics_path = os.path.join(self.log_dir, 'metrics.json')
+        with open(metrics_path, 'w') as f:
+            json.dump(self.history, f, indent=2)
 
         return self.history
 
