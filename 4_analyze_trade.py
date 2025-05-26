@@ -28,6 +28,8 @@ def collect_summary_data(trade_dir):
         if not sub_dirs:
             continue
         sub_dir = sub_dirs[0]
+
+        print(sub_dir)
         
         metrics_path = os.path.join(run_path, sub_dir, "metrics.json")
         summary_path = os.path.join(run_path, sub_dir, "summary.json")
@@ -35,6 +37,9 @@ def collect_summary_data(trade_dir):
         if not (os.path.exists(metrics_path) and os.path.exists(summary_path)):
             continue
         
+        print(metrics_path)
+        print(summary_path)
+
         try:
             with open(metrics_path, 'r') as f:
                 metrics = json.load(f)
@@ -45,6 +50,7 @@ def collect_summary_data(trade_dir):
             params = summary.get("args", {})
             
             if not val_losses:
+                print(f"No val_losses for {run_name}")
                 continue
             
             min_val_loss = min(val_losses)
