@@ -29,16 +29,10 @@ def collect_summary_data(trade_dir):
             continue
         sub_dir = sub_dirs[0]
 
-        print(sub_dir)
-        
         metrics_path = os.path.join(run_path, sub_dir, "metrics.json")
-        summary_path = os.path.join(run_path, sub_dir, "summary.json")
+        summary_path = os.path.join(run_path, "summary.json")
         
-        print(metrics_path)
-        print(summary_path)
-
         if not (os.path.exists(metrics_path) and os.path.exists(summary_path)):
-            42/0
             continue
 
         try:
