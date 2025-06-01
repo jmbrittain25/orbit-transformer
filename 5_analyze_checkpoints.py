@@ -105,233 +105,229 @@ def analyze_run(run_dir, val_raw_df, num_samples=None, num_steps=None):
     sub_dir = [x for x in os.listdir(run_dir) if "." not in x][0]
     sub_dir = os.path.join(run_dir, sub_dir)
 
-    # Process each checkpoint
-    checkpoint_files = [f for f in os.listdir(sub_dir) if f.startswith('checkpoint_epoch_') and f.endswith('.pt')]
-    for checkpoint_file in checkpoint_files:
-        print(checkpoint_file)
+    checkpoint_file = os.path.join(sub_dir, "best_checkpoint.pt")
 
-        checkpoint_path = os.path.join(sub_dir, checkpoint_file)
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
 
-        # Load model
-        model = ot.SixTokenDecoderTransferModel(
-            pos1_vocab_size=n_bins, pos2_vocab_size=n_bins, pos3_vocab_size=n_bins,
-            vel1_vocab_size=n_bins, vel2_vocab_size=n_bins, vel3_vocab_size=n_bins,
-            d_model=args['d_model'], n_heads=args['n_heads'], n_layers=args['n_layers'],
-            d_ff=args['d_ff'], dropout=0.1, max_seq_len=512
-        )
-        model.load_state_dict(checkpoint['model_state_dict'])
-        model.to(device)
-        model.eval()
+    # Load model
+    model = ot.SixTokenDecoderTransferModel(
+        pos1_vocab_size=n_bins, pos2_vocab_size=n_bins, pos3_vocab_size=n_bins,
+        vel1_vocab_size=n_bins, vel2_vocab_size=n_bins, vel3_vocab_size=n_bins,
+        d_model=args['d_model'], n_heads=args['n_heads'], n_layers=args['n_layers'],
+        d_ff=args['d_ff'], dropout=0.1, max_seq_len=512
+    )
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(device)
+    model.eval()
 
-        data = []
-        all_true_positions = []
-        all_pred_positions = []
-        delta_vs = []
+    data = []
+    all_true_positions = []
+    all_pred_positions = []
+    delta_vs = []
 
-        with torch.no_grad():
-            for idx in selected_indices:
-                orbit_id, start_idx, end_idx, _ = val_dataset.examples[idx]
-                group_df = val_dataset.groups.get_group(orbit_id).sort_values('time_s')
+    with torch.no_grad():
+        for idx in selected_indices:
+            orbit_id, start_idx, end_idx, _ = val_dataset.examples[idx]
+            group_df = val_dataset.groups.get_group(orbit_id).sort_values('time_s')
 
-                # Calculate maximum possible steps
-                max_steps = len(group_df) - end_idx
-                effective_steps = max_steps if num_steps is None else min(num_steps, max_steps)
+            # Calculate maximum possible steps
+            max_steps = len(group_df) - end_idx
+            effective_steps = max_steps if num_steps is None else min(num_steps, max_steps)
 
-                if effective_steps <= 0:
-                    continue  # Skip if no future steps available
+            if effective_steps <= 0:
+                continue  # Skip if no future steps available
 
-                current_seq = val_dataset[idx]['input'].clone().to(device)  # (input_length, 6)
+            current_seq = val_dataset[idx]['input'].clone().to(device)  # (input_length, 6)
 
-                initial_raw = group_df.iloc[end_idx - 1][[
-                    'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
-                    'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'sma_km', 'ecc', 'inc_deg',
-                    'raan_deg', 'argp_deg', 'nu_deg'
-                ]].to_dict()
+            initial_raw = group_df.iloc[end_idx - 1][[
+                'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
+                'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'sma_km', 'ecc', 'inc_deg',
+                'raan_deg', 'argp_deg', 'nu_deg'
+            ]].to_dict()
 
-                # Append initial state data (step=-1) for context
+            # Append initial state data (step=-1) for context
+            data.append({
+                'orbit_id': orbit_id,
+                'sequence_start_idx': start_idx,
+                'step': -1,
+                'time_s': group_df.iloc[end_idx - 1]['time_s'],
+                'input_pos1_token': current_seq[-1, 0].item(),
+                'input_pos2_token': current_seq[-1, 1].item(),
+                'input_pos3_token': current_seq[-1, 2].item(),
+                'input_vel1_token': current_seq[-1, 3].item(),
+                'input_vel2_token': current_seq[-1, 4].item(),
+                'input_vel3_token': current_seq[-1, 5].item(),
+                'raw_x_eci_km': initial_raw['x_eci_km'],
+                'raw_y_eci_km': initial_raw['y_eci_km'],
+                'raw_z_eci_km': initial_raw['z_eci_km'],
+                'raw_vx_eci_km_s': initial_raw['vx_eci_km_s'],
+                'raw_vy_eci_km_s': initial_raw['vy_eci_km_s'],
+                'raw_vz_eci_km_s': initial_raw['vz_eci_km_s'],
+                'raw_r_eci_km': initial_raw['r_eci_km'],
+                'raw_theta_eci_deg': initial_raw['theta_eci_deg'],
+                'raw_phi_eci_deg': initial_raw['phi_eci_deg'],
+                'raw_sma_km': initial_raw['sma_km'],
+                'raw_ecc': initial_raw['ecc'],
+                'raw_inc_deg': initial_raw['inc_deg'],
+                'raw_raan_deg': initial_raw['raan_deg'],
+                'raw_argp_deg': initial_raw['argp_deg'],
+                'raw_nu_deg': initial_raw['nu_deg'],
+                'predicted_pos1_token': np.nan,
+                'predicted_pos2_token': np.nan,
+                'predicted_pos3_token': np.nan,
+                'predicted_vel1_token': np.nan,
+                'predicted_vel2_token': np.nan,
+                'predicted_vel3_token': np.nan,
+                'pred_x_eci_km': np.nan,
+                'pred_y_eci_km': np.nan,
+                'pred_z_eci_km': np.nan,
+                'pred_vx_eci_km_s': np.nan,
+                'pred_vy_eci_km_s': np.nan,
+                'pred_vz_eci_km_s': np.nan,
+                'position_error_km': np.nan,
+                'velocity_error_km_s': np.nan,
+                'transfer_delta_v_x': np.nan,
+                'transfer_delta_v_y': np.nan,
+                'transfer_delta_v_z': np.nan,
+                'transfer_delta_v_mag': np.nan,
+                'velocity_match_delta_v_x': np.nan,
+                'velocity_match_delta_v_y': np.nan,
+                'velocity_match_delta_v_z': np.nan,
+                'velocity_match_delta_v_mag': np.nan
+            })
+
+            # Retrieve true future states and metadata
+            true_data = group_df.iloc[end_idx:end_idx + effective_steps][[
+                'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
+                'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'time_s', 'sma_km', 'ecc', 'inc_deg',
+                'raan_deg', 'argp_deg', 'nu_deg'
+            ]]
+
+            S_prev = tokens_to_state_vector(current_seq[-1].cpu().numpy(), tokenizer, coordinate_system)
+            for step in range(effective_steps):
+                # Prepare input tokens
+                pos1_tokens = current_seq[:, 0].unsqueeze(0)
+                pos2_tokens = current_seq[:, 1].unsqueeze(0)
+                pos3_tokens = current_seq[:, 2].unsqueeze(0)
+                vel1_tokens = current_seq[:, 3].unsqueeze(0)
+                vel2_tokens = current_seq[:, 4].unsqueeze(0)
+                vel3_tokens = current_seq[:, 5].unsqueeze(0)
+
+                # Predict next tokens
+                logits = model(pos1_tokens, pos2_tokens, pos3_tokens, vel1_tokens, vel2_tokens, vel3_tokens)
+                predicted_tokens = torch.tensor([torch.argmax(logits[i][0, -1]).item() for i in range(6)], device=device)
+
+                # Convert predicted state
+                S_pred = tokens_to_state_vector(predicted_tokens.cpu().numpy(), tokenizer, coordinate_system)
+                r_pred, v_pred = S_pred[:3], S_pred[3:]
+                all_pred_positions.append(r_pred.tolist())
+
+                dt = 60 * u.s
+
+                # Propagate previous state to get true expected state
+                r_prev, v_prev = S_prev[:3], S_prev[3:]
+
+                # Compute delta-v
+                try:
+                    v1, v2 = izzo.lambert(Earth.k, r_prev * u.km, r_pred * u.km, dt)
+                    transfer_delta_v = (v1 - v_prev * u.km / u.s).to(u.m / u.s).value
+                    velocity_match_delta_v = (v2 - v_pred * u.km / u.s).to(u.m / u.s).value
+                except ValueError as e:
+                    if "collinear vectors" in str(e):
+                        # Handle case where r_pred == r_prev (stay in place)
+                        transfer_delta_v = -v_prev * 1000  # Nullify velocity to stay put (m/s)
+                        velocity_match_delta_v = np.zeros(3)  # No velocity match needed
+                    else:
+                        print(f"Lambert solver failed at step {step} for sequence {idx}: {e}")
+                        transfer_delta_v = np.array([np.nan, np.nan, np.nan])
+                        velocity_match_delta_v = np.array([np.nan, np.nan, np.nan])
+
+                transfer_delta_v_mag = np.linalg.norm(transfer_delta_v) if not np.any(np.isnan(transfer_delta_v)) else np.nan
+                velocity_match_delta_v_mag = np.linalg.norm(velocity_match_delta_v) if not np.any(np.isnan(velocity_match_delta_v)) else np.nan
+                total_dv = transfer_delta_v_mag + velocity_match_delta_v_mag if not np.any(np.isnan([transfer_delta_v_mag, velocity_match_delta_v_mag])) else np.nan
+                delta_vs.append(total_dv)
+
+                raw_data = true_data.iloc[step].to_dict()
+
+                r_true = np.array([
+                    raw_data['x_eci_km'],
+                    raw_data['y_eci_km'],
+                    raw_data['z_eci_km']
+                ], dtype=float)
+
+                v_true = np.array([
+                    raw_data['vx_eci_km_s'],
+                    raw_data['vy_eci_km_s'],
+                    raw_data['vz_eci_km_s']
+                ], dtype=float)
+
+                all_true_positions.append(r_true.tolist())
+
+                # Compute errors against propagated true state
+                position_error = np.linalg.norm(r_true - r_pred) if not np.any(np.isnan(r_pred)) else np.nan
+                velocity_error = np.linalg.norm(v_true - v_pred) if not np.any(np.isnan(v_pred)) else np.nan
+
+                # Store data
                 data.append({
                     'orbit_id': orbit_id,
                     'sequence_start_idx': start_idx,
-                    'step': -1,
-                    'time_s': group_df.iloc[end_idx - 1]['time_s'],
+                    'step': step,
+                    'time_s': raw_data['time_s'],
                     'input_pos1_token': current_seq[-1, 0].item(),
                     'input_pos2_token': current_seq[-1, 1].item(),
                     'input_pos3_token': current_seq[-1, 2].item(),
                     'input_vel1_token': current_seq[-1, 3].item(),
                     'input_vel2_token': current_seq[-1, 4].item(),
                     'input_vel3_token': current_seq[-1, 5].item(),
-                    'raw_x_eci_km': initial_raw['x_eci_km'],
-                    'raw_y_eci_km': initial_raw['y_eci_km'],
-                    'raw_z_eci_km': initial_raw['z_eci_km'],
-                    'raw_vx_eci_km_s': initial_raw['vx_eci_km_s'],
-                    'raw_vy_eci_km_s': initial_raw['vy_eci_km_s'],
-                    'raw_vz_eci_km_s': initial_raw['vz_eci_km_s'],
-                    'raw_r_eci_km': initial_raw['r_eci_km'],
-                    'raw_theta_eci_deg': initial_raw['theta_eci_deg'],
-                    'raw_phi_eci_deg': initial_raw['phi_eci_deg'],
-                    'raw_sma_km': initial_raw['sma_km'],
-                    'raw_ecc': initial_raw['ecc'],
-                    'raw_inc_deg': initial_raw['inc_deg'],
-                    'raw_raan_deg': initial_raw['raan_deg'],
-                    'raw_argp_deg': initial_raw['argp_deg'],
-                    'raw_nu_deg': initial_raw['nu_deg'],
-                    'predicted_pos1_token': np.nan,
-                    'predicted_pos2_token': np.nan,
-                    'predicted_pos3_token': np.nan,
-                    'predicted_vel1_token': np.nan,
-                    'predicted_vel2_token': np.nan,
-                    'predicted_vel3_token': np.nan,
-                    'pred_x_eci_km': np.nan,
-                    'pred_y_eci_km': np.nan,
-                    'pred_z_eci_km': np.nan,
-                    'pred_vx_eci_km_s': np.nan,
-                    'pred_vy_eci_km_s': np.nan,
-                    'pred_vz_eci_km_s': np.nan,
-                    'position_error_km': np.nan,
-                    'velocity_error_km_s': np.nan,
-                    'transfer_delta_v_x': np.nan,
-                    'transfer_delta_v_y': np.nan,
-                    'transfer_delta_v_z': np.nan,
-                    'transfer_delta_v_mag': np.nan,
-                    'velocity_match_delta_v_x': np.nan,
-                    'velocity_match_delta_v_y': np.nan,
-                    'velocity_match_delta_v_z': np.nan,
-                    'velocity_match_delta_v_mag': np.nan
+                    'raw_x_eci_km': raw_data['x_eci_km'],
+                    'raw_y_eci_km': raw_data['y_eci_km'],
+                    'raw_z_eci_km': raw_data['z_eci_km'],
+                    'raw_vx_eci_km_s': raw_data['vx_eci_km_s'],
+                    'raw_vy_eci_km_s': raw_data['vy_eci_km_s'],
+                    'raw_vz_eci_km_s': raw_data['vz_eci_km_s'],
+                    'raw_r_eci_km': raw_data['r_eci_km'],
+                    'raw_theta_eci_deg': raw_data['theta_eci_deg'],
+                    'raw_phi_eci_deg': raw_data['phi_eci_deg'],
+                    'raw_sma_km': raw_data['sma_km'],
+                    'raw_ecc': raw_data['ecc'],
+                    'raw_inc_deg': raw_data['inc_deg'],
+                    'raw_raan_deg': raw_data['raan_deg'],
+                    'raw_argp_deg': raw_data['argp_deg'],
+                    'raw_nu_deg': raw_data['nu_deg'],
+                    'pred_pos1_token': predicted_tokens[0].item(),
+                    'pred_pos2_token': predicted_tokens[1].item(),
+                    'pred_pos3_token': predicted_tokens[2].item(),
+                    'pred_vel1_token': predicted_tokens[3].item(),
+                    'pred_vel2_token': predicted_tokens[4].item(),
+                    'pred_vel3_token': predicted_tokens[5].item(),
+                    'pred_x_eci_km': r_pred[0],
+                    'pred_y_eci_km': r_pred[1],
+                    'pred_z_eci_km': r_pred[2],
+                    'pred_vx_eci_km_s': v_pred[0],
+                    'pred_vy_eci_km_s': v_pred[1],
+                    'pred_vz_eci_km_s': v_pred[2],
+                    'position_error_km': position_error,
+                    'velocity_error_km_s': velocity_error,
+                    'transfer_delta_v_x': transfer_delta_v[0],
+                    'transfer_delta_v_y': transfer_delta_v[1],
+                    'transfer_delta_v_z': transfer_delta_v[2],
+                    'transfer_delta_v_mag': transfer_delta_v_mag,
+                    'velocity_match_delta_v_x': velocity_match_delta_v[0],
+                    'velocity_match_delta_v_y': velocity_match_delta_v[1],
+                    'velocity_match_delta_v_z': velocity_match_delta_v[2],
+                    'velocity_match_delta_v_mag': velocity_match_delta_v_mag
                 })
 
-                # Retrieve true future states and metadata
-                true_data = group_df.iloc[end_idx:end_idx + effective_steps][[
-                    'x_eci_km', 'y_eci_km', 'z_eci_km', 'vx_eci_km_s', 'vy_eci_km_s', 'vz_eci_km_s',
-                    'r_eci_km', 'theta_eci_deg', 'phi_eci_deg', 'time_s', 'sma_km', 'ecc', 'inc_deg',
-                    'raan_deg', 'argp_deg', 'nu_deg'
-                ]]
+                # Update sequence and previous state
+                current_seq = torch.cat([current_seq[1:], predicted_tokens.unsqueeze(0)], dim=0)
+                S_prev = S_pred  # Use predicted state for next iteration
 
-                S_prev = tokens_to_state_vector(current_seq[-1].cpu().numpy(), tokenizer, coordinate_system)
-                for step in range(effective_steps):
-                    # Prepare input tokens
-                    pos1_tokens = current_seq[:, 0].unsqueeze(0)
-                    pos2_tokens = current_seq[:, 1].unsqueeze(0)
-                    pos3_tokens = current_seq[:, 2].unsqueeze(0)
-                    vel1_tokens = current_seq[:, 3].unsqueeze(0)
-                    vel2_tokens = current_seq[:, 4].unsqueeze(0)
-                    vel3_tokens = current_seq[:, 5].unsqueeze(0)
-
-                    # Predict next tokens
-                    logits = model(pos1_tokens, pos2_tokens, pos3_tokens, vel1_tokens, vel2_tokens, vel3_tokens)
-                    predicted_tokens = torch.tensor([torch.argmax(logits[i][0, -1]).item() for i in range(6)], device=device)
-
-                    # Convert predicted state
-                    S_pred = tokens_to_state_vector(predicted_tokens.cpu().numpy(), tokenizer, coordinate_system)
-                    r_pred, v_pred = S_pred[:3], S_pred[3:]
-                    all_pred_positions.append(r_pred.tolist())
-
-                    dt = 60 * u.s
-
-                    # Propagate previous state to get true expected state
-                    r_prev, v_prev = S_prev[:3], S_prev[3:]
-
-                    # Compute delta-v
-                    try:
-                        v1, v2 = izzo.lambert(Earth.k, r_prev * u.km, r_pred * u.km, dt)
-                        transfer_delta_v = (v1 - v_prev * u.km / u.s).to(u.m / u.s).value
-                        velocity_match_delta_v = (v2 - v_pred * u.km / u.s).to(u.m / u.s).value
-                    except ValueError as e:
-                        if "collinear vectors" in str(e):
-                            # Handle case where r_pred == r_prev (stay in place)
-                            transfer_delta_v = -v_prev * 1000  # Nullify velocity to stay put (m/s)
-                            velocity_match_delta_v = np.zeros(3)  # No velocity match needed
-                        else:
-                            print(f"Lambert solver failed at step {step} for sequence {idx}: {e}")
-                            transfer_delta_v = np.array([np.nan, np.nan, np.nan])
-                            velocity_match_delta_v = np.array([np.nan, np.nan, np.nan])
-
-                    transfer_delta_v_mag = np.linalg.norm(transfer_delta_v) if not np.any(np.isnan(transfer_delta_v)) else np.nan
-                    velocity_match_delta_v_mag = np.linalg.norm(velocity_match_delta_v) if not np.any(np.isnan(velocity_match_delta_v)) else np.nan
-                    total_dv = transfer_delta_v_mag + velocity_match_delta_v_mag if not np.any(np.isnan([transfer_delta_v_mag, velocity_match_delta_v_mag])) else np.nan
-                    delta_vs.append(total_dv)
-
-                    raw_data = true_data.iloc[step].to_dict()
-
-                    r_true = np.array([
-                        raw_data['x_eci_km'],
-                        raw_data['y_eci_km'],
-                        raw_data['z_eci_km']
-                    ], dtype=float)
-
-                    v_true = np.array([
-                        raw_data['vx_eci_km_s'],
-                        raw_data['vy_eci_km_s'],
-                        raw_data['vz_eci_km_s']
-                    ], dtype=float)
-
-                    all_true_positions.append(r_true.tolist())
-
-                    # Compute errors against propagated true state
-                    position_error = np.linalg.norm(r_true - r_pred) if not np.any(np.isnan(r_pred)) else np.nan
-                    velocity_error = np.linalg.norm(v_true - v_pred) if not np.any(np.isnan(v_pred)) else np.nan
-
-                    # Store data
-                    data.append({
-                        'orbit_id': orbit_id,
-                        'sequence_start_idx': start_idx,
-                        'step': step,
-                        'time_s': raw_data['time_s'],
-                        'input_pos1_token': current_seq[-1, 0].item(),
-                        'input_pos2_token': current_seq[-1, 1].item(),
-                        'input_pos3_token': current_seq[-1, 2].item(),
-                        'input_vel1_token': current_seq[-1, 3].item(),
-                        'input_vel2_token': current_seq[-1, 4].item(),
-                        'input_vel3_token': current_seq[-1, 5].item(),
-                        'raw_x_eci_km': raw_data['x_eci_km'],
-                        'raw_y_eci_km': raw_data['y_eci_km'],
-                        'raw_z_eci_km': raw_data['z_eci_km'],
-                        'raw_vx_eci_km_s': raw_data['vx_eci_km_s'],
-                        'raw_vy_eci_km_s': raw_data['vy_eci_km_s'],
-                        'raw_vz_eci_km_s': raw_data['vz_eci_km_s'],
-                        'raw_r_eci_km': raw_data['r_eci_km'],
-                        'raw_theta_eci_deg': raw_data['theta_eci_deg'],
-                        'raw_phi_eci_deg': raw_data['phi_eci_deg'],
-                        'raw_sma_km': raw_data['sma_km'],
-                        'raw_ecc': raw_data['ecc'],
-                        'raw_inc_deg': raw_data['inc_deg'],
-                        'raw_raan_deg': raw_data['raan_deg'],
-                        'raw_argp_deg': raw_data['argp_deg'],
-                        'raw_nu_deg': raw_data['nu_deg'],
-                        'pred_pos1_token': predicted_tokens[0].item(),
-                        'pred_pos2_token': predicted_tokens[1].item(),
-                        'pred_pos3_token': predicted_tokens[2].item(),
-                        'pred_vel1_token': predicted_tokens[3].item(),
-                        'pred_vel2_token': predicted_tokens[4].item(),
-                        'pred_vel3_token': predicted_tokens[5].item(),
-                        'pred_x_eci_km': r_pred[0],
-                        'pred_y_eci_km': r_pred[1],
-                        'pred_z_eci_km': r_pred[2],
-                        'pred_vx_eci_km_s': v_pred[0],
-                        'pred_vy_eci_km_s': v_pred[1],
-                        'pred_vz_eci_km_s': v_pred[2],
-                        'position_error_km': position_error,
-                        'velocity_error_km_s': velocity_error,
-                        'transfer_delta_v_x': transfer_delta_v[0],
-                        'transfer_delta_v_y': transfer_delta_v[1],
-                        'transfer_delta_v_z': transfer_delta_v[2],
-                        'transfer_delta_v_mag': transfer_delta_v_mag,
-                        'velocity_match_delta_v_x': velocity_match_delta_v[0],
-                        'velocity_match_delta_v_y': velocity_match_delta_v[1],
-                        'velocity_match_delta_v_z': velocity_match_delta_v[2],
-                        'velocity_match_delta_v_mag': velocity_match_delta_v_mag
-                    })
-
-                    # Update sequence and previous state
-                    current_seq = torch.cat([current_seq[1:], predicted_tokens.unsqueeze(0)], dim=0)
-                    S_prev = S_pred  # Use predicted state for next iteration
-
-            # Calculate trajectory metrics
-            if all_true_positions and all_pred_positions:
-                metrics = calculate_trajectory_metrics(all_true_positions, all_pred_positions)
-                metrics['avg_delta_v_m_s'] = np.nanmean(delta_vs) if delta_vs else np.nan
-                with open(os.path.join(sub_dir, f'analysis_metrics_{checkpoint_file}.json'), 'w') as f:
-                    json.dump(metrics, f, indent=4)
+        # Calculate trajectory metrics
+        if all_true_positions and all_pred_positions:
+            metrics = calculate_trajectory_metrics(all_true_positions, all_pred_positions)
+            metrics['avg_delta_v_m_s'] = np.nanmean(delta_vs) if delta_vs else np.nan
+            with open(os.path.join(sub_dir, f'analysis_metrics_{checkpoint_file}.json'), 'w') as f:
+                json.dump(metrics, f, indent=4)
 
         # Save to CSV
         df = pd.DataFrame(data)
@@ -341,10 +337,12 @@ def analyze_run(run_dir, val_raw_df, num_samples=None, num_steps=None):
 
 
 if __name__ == "__main__":
-    val_raw_path = os.path.join(".", "data", "HEO_only_val_dataset_100_orbits.csv")
+    val_raw_path = os.path.join(".", "data", "orbits_HEO_only_val_dataset_100_raw.csv")
     val_raw_df = pd.read_csv(val_raw_path)
 
-    trade_dir = os.path.join(".", "orbit_training_runs", "scaling_laws_v1")
+    trade_dir = os.path.join(".", "orbit_training_runs", "scaling_laws_v2")
+
+    # TODO - what should i be iterating over here?
 
     for run_name in os.listdir(trade_dir):
         run_dir = os.path.join(trade_dir, run_name)

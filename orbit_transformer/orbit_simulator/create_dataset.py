@@ -9,6 +9,8 @@ from astropy.coordinates import (
 from poliastro.bodies import Earth
 from poliastro.twobody import Orbit
 from tqdm import tqdm
+import multiprocessing
+from functools import partial
 
 
 def generate_random_orbit(epoch, orbit_type="Random"):
@@ -198,29 +200,90 @@ def propagate_orbit_to_df(orbit_obj, orbit_id, orbit_regime, time_step=60*u.s):
     df = pd.DataFrame(rows)
     return df
 
-def generate_orbits_dataset(n_orbits=2, orbit_types=("LEO", "MEO", "HEO", "GEO"), time_step=60*u.s, out_csv="orbits_dataset.csv"):
+# def generate_orbits_dataset(n_orbits=2, orbit_types=("LEO", "MEO", "HEO", "GEO"), time_step=60*u.s, out_csv="orbits_dataset.csv"):
+#     """
+#     Generate multiple random orbits, propagate each, and store data in a single CSV.
+#     """
+#     all_dfs = []
+
+#     # Use current time as reference epoch or pick a custom one
+#     base_epoch = J2000
+
+#     for i in tqdm(range(n_orbits), desc="Generating orbits", unit="orbit"):
+#         chosen_type = np.random.choice(orbit_types)
+#         # Generate random orbit
+#         orb = generate_random_orbit(base_epoch, orbit_type=chosen_type)
+#         orbit_id = f"Orbit_{i+1}"
+#         df = propagate_orbit_to_df(
+#             orbit_obj=orb,
+#             orbit_id=orbit_id,
+#             orbit_regime=chosen_type,
+#             time_step=time_step,
+#         )
+#         all_dfs.append(df)
+
+#     final_df = pd.concat(all_dfs, ignore_index=True)
+#     final_df.to_csv(out_csv, index=False)
+#     print(f"Saved {len(final_df)} rows to {out_csv}")
+#     return final_df
+
+
+def generate_single_orbit(i, orbit_types, time_step, base_epoch):
     """
-    Generate multiple random orbits, propagate each, and store data in a single CSV.
+    Generate and propagate a single orbit.
+    
+    Args:
+        i (int): Orbit index.
+        orbit_types (tuple): Tuple of orbit types to choose from.
+        time_step (astropy.units.quantity.Quantity): Time step for propagation.
+        base_epoch (astropy.time.Time): Base epoch for the orbit.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing the propagated orbit data.
     """
-    all_dfs = []
+    np.random.seed(i)  # Set unique seed for reproducibility
+    chosen_type = np.random.choice(orbit_types)
+    orb = generate_random_orbit(base_epoch, orbit_type=chosen_type)
+    orbit_id = f"Orbit_{i+1}"
+    df = propagate_orbit_to_df(
+        orbit_obj=orb,
+        orbit_id=orbit_id,
+        orbit_regime=chosen_type,
+        time_step=time_step,
+    )
+    return df
 
-    # Use current time as reference epoch or pick a custom one
-    base_epoch = J2000
-
-    for i in tqdm(range(n_orbits), desc="Generating orbits", unit="orbit"):
-        chosen_type = np.random.choice(orbit_types)
-        # Generate random orbit
-        orb = generate_random_orbit(base_epoch, orbit_type=chosen_type)
-        orbit_id = f"Orbit_{i+1}"
-        df = propagate_orbit_to_df(
-            orbit_obj=orb,
-            orbit_id=orbit_id,
-            orbit_regime=chosen_type,
-            time_step=time_step,
-        )
-        all_dfs.append(df)
-
-    final_df = pd.concat(all_dfs, ignore_index=True)
+def generate_orbits_dataset(n_orbits=2, orbit_types=("LEO", "MEO", "HEO", "GEO"), time_step=60*u.s, out_csv="orbits_dataset.csv", num_workers=None):
+    """
+    Generate multiple random orbits in parallel, propagate each, and store data in a single CSV.
+    
+    Args:
+        n_orbits (int): Number of orbits to generate.
+        orbit_types (tuple): Tuple of orbit types to choose from.
+        time_step (astropy.units.quantity.Quantity): Time step for propagation.
+        out_csv (str): Output CSV file path.
+        num_workers (int, optional): Number of worker processes. Defaults to CPU core count.
+    
+    Returns:
+        pd.DataFrame: Concatenated DataFrame of all generated orbits.
+    """
+    if num_workers is None:
+        num_workers = multiprocessing.cpu_count()
+    
+    base_epoch = Time("J2000", scale="tt")
+    
+    # Create a partial function with fixed arguments
+    generate_func = partial(generate_single_orbit, orbit_types=orbit_types, time_step=time_step, base_epoch=base_epoch)
+    
+    # Use multiprocessing pool to generate orbits in parallel
+    with multiprocessing.Pool(num_workers) as pool:
+        results = []
+        # Process orbits and show progress
+        for df in tqdm(pool.imap_unordered(generate_func, range(n_orbits)), total=n_orbits, desc="Generating orbits", unit="orbit"):
+            results.append(df)
+    
+    # Combine all DataFrames
+    final_df = pd.concat(results, ignore_index=True)
     final_df.to_csv(out_csv, index=False)
     print(f"Saved {len(final_df)} rows to {out_csv}")
     return final_df

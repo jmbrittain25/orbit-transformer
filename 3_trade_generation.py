@@ -9,7 +9,8 @@ def generate_combinations():
         {'n_layers': 6, 'n_heads': 8, 'd_model': 512, 'd_ff': 2048},
         # {'n_layers': 8, 'n_heads': 16, 'd_model': 1024, 'd_ff': 4096}  # too big for m2 mac mini to run reasonably fast
     ]
-    dataset_sizes = [100, 500, 1_000, 5_000]
+    # dataset_sizes = [100, 500, 1_000, 5_000]
+    dataset_sizes = [10_000, 50_000, 100_000]
     n_bins_list = [128, 512, 2_048, 8_192]  # [128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384]
     coordinate_systems = ['spherical', 'cartesian']
     lr_list = [1e-3, 1e-4, 1e-5]
@@ -50,7 +51,7 @@ def generate_bash_files(combinations):
         with open(script_path, 'w') as f:
             f.write("#!/bin/bash\n")
             for comb in combs:
-                cmd = "python 2_train.py --trade_name \"scaling_laws_v1\" "
+                cmd = "python 2_train.py --trade_name \"scaling_laws_v2\" "
                 for key, value in comb.items():
                     cmd += f"--{key} {value} "
                 cmd += "\n"
