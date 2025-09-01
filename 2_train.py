@@ -26,6 +26,14 @@ def run_experiment(args):
     d_ff = args_dict["d_ff"]
     epochs = args_dict["epochs"]
 
+    run_name = "_".join([f"{key}{value}" for key, value in args_dict.items() 
+                         if key not in ['trade_name', 'epochs']])
+    output_dir = os.path.join("orbit_training_runs", trade_name, run_name)
+    if os.path.exists(output_dir):
+        print(f"Output directory {output_dir} already exists. Skipping training.")
+        return
+    os.makedirs(output_dir, exist_ok=True)
+
     device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
     print(f"Using device: {device}")
 
@@ -91,11 +99,6 @@ def run_experiment(args):
     )
 
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
-
-    run_name = "_".join([f"{key}{value}" for key, value in args_dict.items() 
-                         if key not in ['trade_name', 'epochs']])
-    output_dir = os.path.join("orbit_training_runs", trade_name, run_name)
-    os.makedirs(output_dir, exist_ok=True)
 
     trainer = ot.OrbitTrainer(
         transfer_model=model,
